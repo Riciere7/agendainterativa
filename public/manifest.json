@@ -1,0 +1,17 @@
+{
+  "name": "Agenda Especial com Amor",
+  "short_name": "Minha Agenda",
+  "description": "Agenda interativa para estudos, trabalhos e compromissos com alertas automáticos no WhatsApp.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#FAF7F5",
+  "theme_color": "#f43f5e",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
