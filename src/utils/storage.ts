@@ -1,22 +1,18 @@
-import { AgendaEvent, HabitTracker, LoveNote, StudyExam, ThemeId, WhatsAppConfig } from '../types';
+import { AgendaEvent, HabitTracker, LoveNote, StudyExam, ThemeId, TelegramConfig } from '../types';
 import { format } from 'date-fns';
 
 const EVENTS_KEY = 'agenda_events_v1';
-const CONFIG_KEY = 'agenda_whatsapp_config_v1';
+const CONFIG_KEY = 'agenda_telegram_config_v1';
 const THEME_KEY = 'agenda_theme_v1';
 const LOVE_NOTES_KEY = 'agenda_love_notes_v1';
 const HABITS_KEY = 'agenda_habits_v1';
 const EXAMS_KEY = 'agenda_exams_v1';
 
-export const DEFAULT_CONFIG: WhatsAppConfig = {
+export const DEFAULT_TELEGRAM_CONFIG: TelegramConfig = {
   wifeName: 'Amor',
-  wifePhone: '',
   husbandName: 'Seu Amor',
-  provider: 'callmebot',
-  callmebotApiKey: '',
-  evolutionApiUrl: '',
-  evolutionApiKey: '',
-  evolutionInstanceName: 'agenda',
+  botToken: '',
+  chatId: '',
   autoSendEnabled: true,
   soundEnabled: true,
   sweetMessageSuffix: true,
@@ -167,21 +163,21 @@ export function saveEvents(events: AgendaEvent[]): void {
   }
 }
 
-export function loadWhatsAppConfig(): WhatsAppConfig {
+export function loadTelegramConfig(): TelegramConfig {
   try {
     const raw = localStorage.getItem(CONFIG_KEY);
-    if (!raw) return DEFAULT_CONFIG;
-    return { ...DEFAULT_CONFIG, ...JSON.parse(raw) };
+    if (!raw) return DEFAULT_TELEGRAM_CONFIG;
+    return { ...DEFAULT_TELEGRAM_CONFIG, ...JSON.parse(raw) };
   } catch {
-    return DEFAULT_CONFIG;
+    return DEFAULT_TELEGRAM_CONFIG;
   }
 }
 
-export function saveWhatsAppConfig(config: WhatsAppConfig): void {
+export function saveTelegramConfig(config: TelegramConfig): void {
   try {
     localStorage.setItem(CONFIG_KEY, JSON.stringify(config));
   } catch (err) {
-    console.error('Failed to save whatsapp config', err);
+    console.error('Failed to save telegram config', err);
   }
 }
 

@@ -52,7 +52,7 @@ export const CloudflareDeployGuideModal: React.FC<CloudflareDeployGuideModalProp
               <span>Pronto para o Cloudflare Pages!</span>
             </div>
             <p className="text-xs sm:text-sm text-gray-700 leading-relaxed">
-              O projeto já inclui todas as configurações do Cloudflare Pages: SPA redirects (<code className="font-mono bg-white px-1 py-0.5 rounded text-orange-700">_redirects</code>), cabeçalhos de segurança (<code className="font-mono bg-white px-1 py-0.5 rounded text-orange-700">_headers</code>) e a função serverless de WhatsApp em <code className="font-mono bg-white px-1 py-0.5 rounded text-orange-700">functions/api/send-whatsapp.ts</code>.
+              O projeto já inclui todas as configurações do Cloudflare Pages: SPA redirects (<code className="font-mono bg-white px-1 py-0.5 rounded text-orange-700">_redirects</code>), cabeçalhos de segurança (<code className="font-mono bg-white px-1 py-0.5 rounded text-orange-700">_headers</code>) e a função serverless do Telegram em <code className="font-mono bg-white px-1 py-0.5 rounded text-orange-700">functions/api/send-telegram.ts</code>.
             </p>
           </div>
 

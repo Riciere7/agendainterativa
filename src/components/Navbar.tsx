@@ -1,16 +1,15 @@
 import React, { useState } from 'react';
-import { ThemeId, WhatsAppConfig } from '../types';
+import { ThemeId, TelegramConfig } from '../types';
 import { THEMES } from '../utils/theme';
 import {
   Calendar,
   BookOpen,
   Droplet,
   Heart,
-  Settings,
   Cloud,
   Plus,
-  Palette,
   Sparkles,
+  Send,
 } from 'lucide-react';
 
 interface NavbarProps {
@@ -18,7 +17,7 @@ interface NavbarProps {
   onTabChange: (tab: 'agenda' | 'estudos' | 'habitos' | 'amor') => void;
   currentTheme: ThemeId;
   onThemeChange: (theme: ThemeId) => void;
-  config: WhatsAppConfig;
+  config: TelegramConfig;
   loveNotesCount: number;
   onOpenSettings: () => void;
   onOpenDeployGuide: () => void;
@@ -47,6 +46,8 @@ export const Navbar: React.FC<NavbarProps> = ({
     { id: 'velvet', label: 'Noite Aveludada (Escuro)', icon: '🌙' },
   ];
 
+  const isTelegramConfigured = Boolean(config.botToken && config.chatId);
+
   return (
     <header className="sticky top-0 z-40 bg-white/80 backdrop-blur-xl border-b border-gray-100 shadow-xs">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -64,7 +65,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <Heart className="w-4 h-4 fill-rose-500 text-rose-500" />
               </div>
               <p className="text-[11px] text-gray-500 hidden sm:block">
-                Alertas inteligentes no WhatsApp & Foco diário
+                Alertas ilimitados no Telegram & Foco diário
               </p>
             </div>
           </div>
@@ -174,18 +175,18 @@ export const Navbar: React.FC<NavbarProps> = ({
               <span className="hidden lg:inline">Cloudflare Pages</span>
             </button>
 
-            {/* WhatsApp Settings button */}
+            {/* Telegram Settings button */}
             <button
               onClick={onOpenSettings}
               className={`p-2 sm:px-3 sm:py-2 rounded-xl border text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer ${
-                config.wifePhone
-                  ? 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+                isTelegramConfigured
+                  ? 'border-sky-200 bg-sky-50 text-sky-700 hover:bg-sky-100'
                   : 'border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100 animate-pulse'
               }`}
-              title="Configurações de WhatsApp"
+              title="Configurações do Telegram Bot"
             >
-              <Settings className="w-4 h-4" />
-              <span className="hidden sm:inline">WhatsApp</span>
+              <Send className="w-4 h-4 text-sky-600" />
+              <span className="hidden sm:inline">Telegram</span>
             </button>
 
             {/* Add Event Primary CTA */}

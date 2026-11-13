@@ -1,12 +1,12 @@
 import React from 'react';
-import { HabitTracker, WhatsAppConfig } from '../types';
+import { HabitTracker, TelegramConfig } from '../types';
 import { soundEffects } from '../utils/audio';
 import confetti from 'canvas-confetti';
 import { Droplet, Heart, Smile, Sparkles } from 'lucide-react';
 
 interface HabitsWellnessProps {
   habit: HabitTracker;
-  config: WhatsAppConfig;
+  config: TelegramConfig;
   onUpdateHabit: (habit: HabitTracker) => void;
 }
 

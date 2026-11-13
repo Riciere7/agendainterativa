@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
-import { WhatsAppConfig, AgendaEvent, HabitTracker, ThemeId } from '../types';
+import { TelegramConfig, AgendaEvent, HabitTracker, ThemeId } from '../types';
 import { getDailyQuote } from '../utils/quotes';
 import { THEMES } from '../utils/theme';
-import { Heart, Sparkles, Calendar, CheckCircle2, Droplet, MessageCircleHeart } from 'lucide-react';
+import { Heart, Sparkles, Calendar, CheckCircle2, Droplet, MessageCircleHeart, Send } from 'lucide-react';
 
 interface HeaderHeroProps {
-  config: WhatsAppConfig;
+  config: TelegramConfig;
   events: AgendaEvent[];
   habit: HabitTracker;
   theme: ThemeId;
@@ -36,6 +36,8 @@ export const HeaderHero: React.FC<HeaderHeroProps> = ({
   const todayEvents = events.filter((e) => e.date === todayStr);
   const completedToday = todayEvents.filter((e) => e.completed).length;
 
+  const isConfigured = Boolean(config.botToken && config.chatId);
+
   return (
     <div className="w-full mb-8">
       {/* Banner Card */}
@@ -59,7 +61,7 @@ export const HeaderHero: React.FC<HeaderHeroProps> = ({
             </h1>
 
             <p className="text-white/90 text-sm sm:text-base leading-relaxed max-w-xl mb-5">
-              Seu cantinho especial para organizar estudos, trabalho e momentos que importam. Lembretes automáticos direto no seu WhatsApp para você brilhar sem estresse!
+              Seu cantinho especial para organizar estudos, trabalho e momentos que importam. Lembretes automáticos e ilimitados direto no seu Telegram para você brilhar sem estresse!
             </p>
 
             {/* Quick Metrics Badges */}
@@ -128,21 +130,22 @@ export const HeaderHero: React.FC<HeaderHeroProps> = ({
           </div>
         </div>
 
-        {/* WhatsApp Alert Status Pill */}
+        {/* Telegram Alert Status Pill */}
         <div className="mt-5 pt-4 border-t border-white/20 flex flex-wrap items-center justify-between gap-3 text-xs text-white/90">
           <div className="flex items-center gap-2">
             <span
               className={`w-2.5 h-2.5 rounded-full ${
-                config.wifePhone ? 'bg-emerald-300 animate-ping' : 'bg-amber-300'
+                isConfigured ? 'bg-sky-300 animate-ping' : 'bg-amber-300'
               }`}
             />
-            <span>
-              {config.wifePhone ? (
+            <span className="flex items-center gap-1.5">
+              <Send className="w-3.5 h-3.5 text-sky-200" />
+              {isConfigured ? (
                 <>
-                  WhatsApp conectado: <strong>{config.wifePhone}</strong> ({config.provider === 'callmebot' ? 'CallMeBot Automático' : config.provider === 'evolution' ? 'Evolution API' : 'Envio Direto'})
+                  Telegram Bot conectado (Chat ID: <strong>{config.chatId}</strong>) • Lembretes automáticos e gratuitos
                 </>
               ) : (
-                <>⚠️ Número do WhatsApp ainda não configurado para receber alertas.</>
+                <>Telegram Bot ainda não configurado. Ative em 30 segundos!</>
               )}
             </span>
           </div>
@@ -151,7 +154,7 @@ export const HeaderHero: React.FC<HeaderHeroProps> = ({
             onClick={onOpenSettings}
             className="underline hover:text-white cursor-pointer transition-colors"
           >
-            {config.wifePhone ? 'Alterar configurações de WhatsApp' : 'Configurar WhatsApp agora →'}
+            {isConfigured ? 'Alterar configurações do Telegram' : 'Configurar Telegram agora →'}
           </button>
         </div>
       </div>

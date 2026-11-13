@@ -1,15 +1,15 @@
-import React from 'react';
-import { AgendaEvent, WhatsAppConfig } from '../types';
+import React, { useState } from 'react';
+import { AgendaEvent, TelegramConfig } from '../types';
 import { EventCard } from './EventCard';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { Plus, Sparkles, Send, CalendarCheck } from 'lucide-react';
-import { getDirectWhatsAppUrl } from '../utils/whatsapp';
+import { Plus, Sparkles, Send, Loader2 } from 'lucide-react';
+import { sendRawTelegramMessage } from '../utils/telegram';
 
 interface DailyTimelineProps {
   date: Date;
   events: AgendaEvent[];
-  config: WhatsAppConfig;
+  config: TelegramConfig;
   onAddNewEvent: () => void;
   onToggleComplete: (id: string) => void;
   onEditEvent: (event: AgendaEvent) => void;
@@ -27,6 +27,9 @@ export const DailyTimeline: React.FC<DailyTimelineProps> = ({
   onDeleteEvent,
   onEventUpdated,
 }) => {
+  const [isSendingSummary, setIsSendingSummary] = useState(false);
+  const [summaryStatus, setSummaryStatus] = useState<string | null>(null);
+
   const dateStr = format(date, 'yyyy-MM-dd');
   const dayEvents = events
     .filter((e) => e.date === dateStr)
@@ -37,30 +40,40 @@ export const DailyTimeline: React.FC<DailyTimelineProps> = ({
 
   const completedCount = dayEvents.filter((e) => e.completed).length;
 
-  // Build a summary message for the whole day to send via WhatsApp
-  const handleSendDailySummary = () => {
-    if (!config.wifePhone) {
-      alert('Configure o número de WhatsApp nas configurações primeiro!');
+  // Build a summary message for the whole day to send via Telegram
+  const handleSendDailySummary = async () => {
+    if (!config.botToken || !config.chatId) {
+      alert('Configure o Bot Token e o Chat ID nas configurações do Telegram primeiro!');
       return;
     }
     if (dayEvents.length === 0) return;
 
-    let summary = `🌟 *RESUMO DO DIA - ${formattedDateTitle.toUpperCase()}* 🌟\n\n`;
-    summary += `Oi ${config.wifeName || 'meu amor'}! Aqui está o seu roteiro de hoje:\n\n`;
+    setIsSendingSummary(true);
+    setSummaryStatus(null);
+
+    let summary = `🌟 <b>ROTEIRO DO DIA - ${formattedDateTitle.toUpperCase()}</b> 🌟\n\n`;
+    summary += `Oi <b>${config.wifeName || 'meu amor'}</b>! Aqui está a sua programação de hoje:\n\n`;
 
     dayEvents.forEach((ev, i) => {
       const time = ev.time ? `[${ev.time}] ` : '';
       const check = ev.completed ? '✅' : '⏳';
-      summary += `${i + 1}. ${check} ${time}*${ev.title}*\n`;
-      if (ev.locationOrLink) summary += `   📍 ${ev.locationOrLink}\n`;
+      summary += `${i + 1}. ${check} ${time}<b>${ev.title}</b>\n`;
+      if (ev.locationOrLink) summary += `   📍 <i>${ev.locationOrLink}</i>\n`;
     });
 
-    summary += `\n💪 *Você é capaz de tudo! Qualquer coisa estou por aqui.*\n${
-      config.husbandName ? `Com amor, ${config.husbandName} ❤️` : 'Te amo! ❤️'
+    summary += `\n💪 <i>Você é capaz de tudo! Qualquer coisa estou por aqui torcendo por você.</i>\n${
+      config.husbandName ? `Com amor, <b>${config.husbandName}</b> ❤️` : 'Te amo! ❤️'
     }`;
 
-    const url = getDirectWhatsAppUrl(config.wifePhone, summary);
-    window.open(url, '_blank');
+    try {
+      const res = await sendRawTelegramMessage(summary, config);
+      setSummaryStatus(res.success ? 'Roteiro enviado no Telegram!' : res.message);
+    } catch {
+      setSummaryStatus('Erro ao enviar roteiro.');
+    } finally {
+      setIsSendingSummary(false);
+      setTimeout(() => setSummaryStatus(null), 4000);
+    }
   };
 
   return (
@@ -82,11 +95,16 @@ export const DailyTimeline: React.FC<DailyTimelineProps> = ({
           {dayEvents.length > 0 && (
             <button
               onClick={handleSendDailySummary}
-              className="px-3 py-2 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
-              title="Enviar roteiro completo do dia para o WhatsApp dela"
+              disabled={isSendingSummary}
+              className="px-3 py-2 rounded-xl bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-200 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+              title="Enviar roteiro completo do dia para o Telegram dela"
             >
-              <Send className="w-3.5 h-3.5" />
-              <span>Enviar Roteiro WhatsApp</span>
+              {isSendingSummary ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <Send className="w-3.5 h-3.5 text-sky-600" />
+              )}
+              <span>{summaryStatus || 'Enviar Roteiro Telegram'}</span>
             </button>
           )}
 

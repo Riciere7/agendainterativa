@@ -29,15 +29,12 @@ export interface LoveNote {
   pinned?: boolean;
 }
 
-export interface WhatsAppConfig {
+export interface TelegramConfig {
   wifeName: string;
-  wifePhone: string; // e.g. 5511999999999
   husbandName: string;
-  provider: 'callmebot' | 'evolution' | 'manual';
-  callmebotApiKey?: string;
-  evolutionApiUrl?: string;
-  evolutionApiKey?: string;
-  evolutionInstanceName?: string;
+  botToken: string; // e.g. 123456789:ABCdef...
+  chatId: string; // e.g. 987654321
+  topicId?: string; // optional supergroup topic
   autoSendEnabled: boolean;
   soundEnabled: boolean;
   sweetMessageSuffix: boolean;

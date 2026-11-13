@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { AgendaEvent, WhatsAppConfig } from '../types';
-import { getCategoryEmoji, getCategoryLabel, sendWhatsAppNotification } from '../utils/whatsapp';
+import { AgendaEvent, TelegramConfig } from '../types';
+import { getCategoryEmoji, getCategoryLabel, sendTelegramNotification } from '../utils/telegram';
 import { soundEffects } from '../utils/audio';
 import confetti from 'canvas-confetti';
 import {
@@ -20,7 +20,7 @@ import {
 
 interface EventCardProps {
   event: AgendaEvent;
-  config: WhatsAppConfig;
+  config: TelegramConfig;
   onToggleComplete: (id: string) => void;
   onEdit: (event: AgendaEvent) => void;
   onDelete: (id: string) => void;
@@ -66,16 +66,15 @@ export const EventCard: React.FC<EventCardProps> = ({
     onToggleComplete(event.id);
   };
 
-  const handleSendWhatsApp = async () => {
+  const handleSendTelegram = async () => {
     setIsSending(true);
     setStatusMessage(null);
     try {
-      const res = await sendWhatsAppNotification(event, config);
+      const res = await sendTelegramNotification(event, config);
       setStatusMessage(res.message);
-      if (res.directUrl) {
-        window.open(res.directUrl, '_blank', 'noopener,noreferrer');
+      if (res.success) {
+        onEventUpdated({ ...event, reminderSent: true });
       }
-      onEventUpdated({ ...event, reminderSent: true });
     } catch {
       setStatusMessage('Erro ao enviar alerta');
     } finally {
@@ -84,7 +83,9 @@ export const EventCard: React.FC<EventCardProps> = ({
     }
   };
 
-  const isLink = event.locationOrLink && (event.locationOrLink.startsWith('http://') || event.locationOrLink.startsWith('https://'));
+  const isLink =
+    event.locationOrLink &&
+    (event.locationOrLink.startsWith('http://') || event.locationOrLink.startsWith('https://'));
 
   return (
     <div
@@ -179,13 +180,13 @@ export const EventCard: React.FC<EventCardProps> = ({
             )}
           </div>
 
-          {/* WhatsApp Direct Action Bar */}
+          {/* Telegram Direct Action Bar */}
           <div className="mt-3 pt-2.5 border-t border-gray-100 flex flex-wrap items-center justify-between gap-2">
             <button
-              onClick={handleSendWhatsApp}
+              onClick={handleSendTelegram}
               disabled={isSending}
-              className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 transition-colors cursor-pointer"
-              title="Disparar lembrete com carinho no WhatsApp dela"
+              className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-200 transition-colors cursor-pointer"
+              title="Disparar lembrete com carinho no Telegram dela"
             >
               {isSending ? (
                 <>
@@ -195,13 +196,13 @@ export const EventCard: React.FC<EventCardProps> = ({
               ) : (
                 <>
                   <Send className="w-3.5 h-3.5" />
-                  <span>Alertar no WhatsApp</span>
+                  <span>Alertar no Telegram</span>
                 </>
               )}
             </button>
 
             {statusMessage && (
-              <span className="text-xs text-emerald-600 font-medium animate-fade-in">
+              <span className="text-xs text-sky-600 font-medium animate-fade-in">
                 {statusMessage}
               </span>
             )}
@@ -220,10 +221,7 @@ export const EventCard: React.FC<EventCardProps> = ({
 
           {menuOpen && (
             <>
-              <div
-                className="fixed inset-0 z-10"
-                onClick={() => setMenuOpen(false)}
-              />
+              <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
               <div className="absolute right-0 top-full mt-1 w-36 bg-white rounded-xl shadow-lg border border-gray-100 py-1 z-20 text-xs">
                 <button
                   onClick={() => {

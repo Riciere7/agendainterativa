@@ -1,12 +1,12 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { AgendaEvent, WhatsAppConfig } from '../types';
-import { sendWhatsAppNotification, formatEventWhatsAppMessage } from '../utils/whatsapp';
+import { AgendaEvent, TelegramConfig } from '../types';
+import { sendTelegramNotification } from '../utils/telegram';
 import { soundEffects } from '../utils/audio';
-import { BellRing, CheckCircle, AlertTriangle, Send } from 'lucide-react';
+import { BellRing } from 'lucide-react';
 
 interface NotificationCheckerProps {
   events: AgendaEvent[];
-  config: WhatsAppConfig;
+  config: TelegramConfig;
   onUpdateEvent: (event: AgendaEvent) => void;
 }
 
@@ -60,19 +60,19 @@ export const NotificationChecker: React.FC<NotificationCheckerProps> = ({
             try {
               new Notification(`🔔 Lembrete: ${event.title}`, {
                 body: `Oi ${config.wifeName || 'meu amor'}! Seu compromisso está chegando às ${event.time || ''}!`,
-                icon: '/favicon.ico',
+                icon: '/favicon.svg',
               });
             } catch {
               // ignore
             }
           }
 
-          // 3. Send WhatsApp Notification
-          if (config.autoSendEnabled && config.wifePhone) {
+          // 3. Send Telegram Notification
+          if (config.autoSendEnabled && config.botToken && config.chatId) {
             try {
-              await sendWhatsAppNotification(event, config);
+              await sendTelegramNotification(event, config);
             } catch (err) {
-              console.error('Falha ao disparar alerta WhatsApp automático:', err);
+              console.error('Falha ao disparar alerta Telegram automático:', err);
             }
           }
 
@@ -101,18 +101,18 @@ export const NotificationChecker: React.FC<NotificationCheckerProps> = ({
 
   return (
     <div className="fixed bottom-6 right-6 z-50 animate-bounce">
-      <div className="bg-gradient-to-r from-rose-500 to-pink-500 text-white p-4 rounded-2xl shadow-2xl border border-white/20 flex items-center gap-3 max-w-sm">
+      <div className="bg-gradient-to-r from-sky-500 to-indigo-600 text-white p-4 rounded-2xl shadow-2xl border border-white/20 flex items-center gap-3 max-w-sm">
         <div className="p-2 bg-white/20 rounded-xl">
           <BellRing className="w-5 h-5 text-white animate-spin" style={{ animationDuration: '3s' }} />
         </div>
         <div className="text-xs">
-          <div className="font-bold uppercase tracking-wider text-rose-100 flex items-center gap-1">
-            <span>Alerta Disparado!</span>
+          <div className="font-bold uppercase tracking-wider text-sky-100 flex items-center gap-1">
+            <span>Alerta Telegram Disparado!</span>
             <span>({lastAlert.time})</span>
           </div>
           <div className="font-semibold text-white truncate max-w-[200px]">{lastAlert.title}</div>
-          <div className="text-rose-100/90 text-[11px]">
-            Lembrete enviado para o WhatsApp de {config.wifeName || 'sua esposa'} 💕
+          <div className="text-sky-100/90 text-[11px]">
+            Lembrete enviado para o Telegram de {config.wifeName || 'sua esposa'} 💕
           </div>
         </div>
       </div>

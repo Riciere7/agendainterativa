@@ -1,14 +1,14 @@
 import React, { useState } from 'react';
-import { LoveNote, WhatsAppConfig } from '../types';
+import { LoveNote, TelegramConfig } from '../types';
 import { X, Heart, Plus, Pin, Trash2, Send, Sparkles } from 'lucide-react';
 import { soundEffects } from '../utils/audio';
-import { getDirectWhatsAppUrl } from '../utils/whatsapp';
+import { sendRawTelegramMessage } from '../utils/telegram';
 
 interface LoveNotesModalProps {
   isOpen: boolean;
   onClose: () => void;
   notes: LoveNote[];
-  config: WhatsAppConfig;
+  config: TelegramConfig;
   onSaveNotes: (notes: LoveNote[]) => void;
 }
 
@@ -22,6 +22,7 @@ export const LoveNotesModal: React.FC<LoveNotesModalProps> = ({
   const [newText, setNewText] = useState('');
   const [author, setAuthor] = useState(config.husbandName || 'Seu Amor ❤️');
   const [selectedColor, setSelectedColor] = useState('#FFE4E6'); // rose-100
+  const [sendStatus, setSendStatus] = useState<string | null>(null);
 
   if (!isOpen) return null;
 
@@ -61,14 +62,15 @@ export const LoveNotesModal: React.FC<LoveNotesModalProps> = ({
     onSaveNotes(updated);
   };
 
-  const sendNoteToWhatsApp = (note: LoveNote) => {
-    if (!config.wifePhone) {
-      alert('Configure o número de WhatsApp nas configurações primeiro!');
+  const sendNoteToTelegram = async (note: LoveNote) => {
+    if (!config.botToken || !config.chatId) {
+      alert('Configure o Telegram nas configurações primeiro!');
       return;
     }
-    const message = `💌 *BILHETINHO DE AMOR PRA VOCÊ* 💌\n\n"${note.text}"\n\n— ${note.author}`;
-    const url = getDirectWhatsAppUrl(config.wifePhone, message);
-    window.open(url, '_blank');
+    const message = `💌 <b>BILHETINHO DE AMOR PRA VOCÊ</b> 💌\n\n<i>"${note.text}"</i>\n\n— <b>${note.author}</b>`;
+    const res = await sendRawTelegramMessage(message, config);
+    setSendStatus(res.success ? 'Bilhetinho enviado no Telegram!' : res.message);
+    setTimeout(() => setSendStatus(null), 3500);
   };
 
   return (
@@ -96,6 +98,12 @@ export const LoveNotesModal: React.FC<LoveNotesModalProps> = ({
         </div>
 
         <div className="p-6 space-y-6">
+          {sendStatus && (
+            <div className="p-3 rounded-xl bg-sky-50 border border-sky-200 text-sky-800 text-xs font-semibold text-center animate-fade-in">
+              {sendStatus}
+            </div>
+          )}
+
           {/* Create new sticky note */}
           <form
             onSubmit={handleAddNote}
@@ -177,9 +185,9 @@ export const LoveNotesModal: React.FC<LoveNotesModalProps> = ({
                         <Pin className="w-3.5 h-3.5" />
                       </button>
                       <button
-                        onClick={() => sendNoteToWhatsApp(note)}
-                        className="p-1 rounded-lg text-emerald-600 hover:text-emerald-800 cursor-pointer"
-                        title="Enviar este recado para o WhatsApp dela"
+                        onClick={() => sendNoteToTelegram(note)}
+                        className="p-1 rounded-lg text-sky-600 hover:text-sky-800 cursor-pointer"
+                        title="Enviar este recado para o Telegram dela"
                       >
                         <Send className="w-3.5 h-3.5" />
                       </button>

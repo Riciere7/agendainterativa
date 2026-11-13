@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { AgendaEvent, HabitTracker, LoveNote, StudyExam, ThemeId, WhatsAppConfig } from './types';
+import { AgendaEvent, HabitTracker, LoveNote, StudyExam, ThemeId, TelegramConfig } from './types';
 import {
   loadEvents,
   saveEvents,
-  loadWhatsAppConfig,
-  saveWhatsAppConfig,
+  loadTelegramConfig,
+  saveTelegramConfig,
   loadTheme,
   saveTheme,
   loadLoveNotes,
@@ -24,18 +24,18 @@ import { StudyHub } from './components/StudyHub';
 import { HabitsWellness } from './components/HabitsWellness';
 import { LoveNotesModal } from './components/LoveNotesModal';
 import { EventModal } from './components/EventModal';
-import { WhatsAppSettingsModal } from './components/WhatsAppSettingsModal';
+import { TelegramSettingsModal } from './components/TelegramSettingsModal';
 import { CloudflareDeployGuideModal } from './components/CloudflareDeployGuideModal';
 import { NotificationChecker } from './components/NotificationChecker';
-import { Heart, Cloud, Sparkles, Plus, Pin, Send, Trash2 } from 'lucide-react';
-import { getDirectWhatsAppUrl } from './utils/whatsapp';
+import { Heart, Cloud, Sparkles, Plus, Send, Trash2 } from 'lucide-react';
+import { sendRawTelegramMessage } from './utils/telegram';
 
 export function App() {
   const todayStr = getTodayDateString();
 
   // Persistent States
   const [events, setEvents] = useState<AgendaEvent[]>(() => loadEvents());
-  const [config, setConfig] = useState<WhatsAppConfig>(() => loadWhatsAppConfig());
+  const [config, setConfig] = useState<TelegramConfig>(() => loadTelegramConfig());
   const [theme, setTheme] = useState<ThemeId>(() => loadTheme());
   const [loveNotes, setLoveNotes] = useState<LoveNote[]>(() => loadLoveNotes());
   const [exams, setExams] = useState<StudyExam[]>(() => loadExams());
@@ -50,9 +50,10 @@ export function App() {
   // Modals
   const [isEventModalOpen, setIsEventModalOpen] = useState(false);
   const [eventToEdit, setEventToEdit] = useState<AgendaEvent | null>(null);
-  const [isWhatsAppModalOpen, setIsWhatsAppModalOpen] = useState(false);
+  const [isTelegramModalOpen, setIsTelegramModalOpen] = useState(false);
   const [isDeployGuideModalOpen, setIsDeployGuideModalOpen] = useState(false);
   const [isLoveNotesModalOpen, setIsLoveNotesModalOpen] = useState(false);
+  const [toastNoteStatus, setToastNoteStatus] = useState<string | null>(null);
 
   // Sync to localStorage
   useEffect(() => {
@@ -60,7 +61,7 @@ export function App() {
   }, [events]);
 
   useEffect(() => {
-    saveWhatsAppConfig(config);
+    saveTelegramConfig(config);
   }, [config]);
 
   useEffect(() => {
@@ -133,7 +134,7 @@ export function App() {
         onThemeChange={setTheme}
         config={config}
         loveNotesCount={loveNotes.length}
-        onOpenSettings={() => setIsWhatsAppModalOpen(true)}
+        onOpenSettings={() => setIsTelegramModalOpen(true)}
         onOpenDeployGuide={() => setIsDeployGuideModalOpen(true)}
         onOpenNewEvent={handleOpenNewEvent}
       />
@@ -147,7 +148,7 @@ export function App() {
           habit={habit}
           theme={theme}
           onOpenLoveNotes={() => setIsLoveNotesModalOpen(true)}
-          onOpenSettings={() => setIsWhatsAppModalOpen(true)}
+          onOpenSettings={() => setIsTelegramModalOpen(true)}
           onOpenWater={() => setActiveTab('habitos')}
         />
 
@@ -224,6 +225,12 @@ export function App() {
               </button>
             </div>
 
+            {toastNoteStatus && (
+              <div className="mb-4 p-3 rounded-xl bg-sky-50 border border-sky-200 text-sky-800 text-xs font-semibold text-center animate-fade-in">
+                {toastNoteStatus}
+              </div>
+            )}
+
             {/* Sticky Notes Grid */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {loveNotes.map((note) => (
@@ -240,16 +247,18 @@ export function App() {
 
                       <div className="flex items-center gap-1">
                         <button
-                          onClick={() => {
-                            if (!config.wifePhone) {
-                              alert('Configure o WhatsApp dela nas configurações!');
+                          onClick={async () => {
+                            if (!config.botToken || !config.chatId) {
+                              alert('Configure o Telegram nas configurações!');
                               return;
                             }
-                            const msg = `💌 *BILHETINHO DE AMOR* 💌\n\n"${note.text}"\n\n— ${note.author}`;
-                            window.open(getDirectWhatsAppUrl(config.wifePhone, msg), '_blank');
+                            const msg = `💌 <b>BILHETINHO DE AMOR</b> 💌\n\n<i>"${note.text}"</i>\n\n— <b>${note.author}</b>`;
+                            const res = await sendRawTelegramMessage(msg, config);
+                            setToastNoteStatus(res.success ? 'Bilhete enviado para o Telegram dela!' : res.message);
+                            setTimeout(() => setToastNoteStatus(null), 3500);
                           }}
-                          className="p-1 rounded-lg text-emerald-600 hover:text-emerald-800 cursor-pointer"
-                          title="Enviar este recado no WhatsApp dela"
+                          className="p-1 rounded-lg text-sky-600 hover:text-sky-800 cursor-pointer"
+                          title="Enviar este recado no Telegram dela"
                         >
                           <Send className="w-3.5 h-3.5" />
                         </button>
@@ -302,11 +311,11 @@ export function App() {
             <span>•</span>
 
             <button
-              onClick={() => setIsWhatsAppModalOpen(true)}
-              className="hover:text-emerald-600 flex items-center gap-1 cursor-pointer transition-colors"
+              onClick={() => setIsTelegramModalOpen(true)}
+              className="hover:text-sky-600 flex items-center gap-1 cursor-pointer transition-colors"
             >
-              <Sparkles className="w-3.5 h-3.5 text-emerald-500" />
-              <span>Alertas WhatsApp Ativos</span>
+              <Sparkles className="w-3.5 h-3.5 text-sky-500" />
+              <span>Telegram Bot Ativo</span>
             </button>
           </div>
         </div>
@@ -325,9 +334,9 @@ export function App() {
         config={config}
       />
 
-      <WhatsAppSettingsModal
-        isOpen={isWhatsAppModalOpen}
-        onClose={() => setIsWhatsAppModalOpen(false)}
+      <TelegramSettingsModal
+        isOpen={isTelegramModalOpen}
+        onClose={() => setIsTelegramModalOpen(false)}
         config={config}
         onSaveConfig={setConfig}
       />

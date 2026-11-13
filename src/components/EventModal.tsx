@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { AgendaEvent, EventCategory, EventPriority, ReminderTiming, WhatsAppConfig } from '../types';
-import { formatEventWhatsAppMessage } from '../utils/whatsapp';
+import { AgendaEvent, EventCategory, EventPriority, ReminderTiming, TelegramConfig } from '../types';
+import { formatEventTelegramHtml } from '../utils/telegram';
 import { X, Sparkles, Clock, Calendar, MapPin, AlignLeft, BellRing, Eye, Check } from 'lucide-react';
 
 interface EventModalProps {
@@ -9,7 +9,7 @@ interface EventModalProps {
   onSave: (event: AgendaEvent) => void;
   eventToEdit?: AgendaEvent | null;
   defaultDate?: string;
-  config: WhatsAppConfig;
+  config: TelegramConfig;
 }
 
 export const EventModal: React.FC<EventModalProps> = ({
@@ -72,7 +72,7 @@ export const EventModal: React.FC<EventModalProps> = ({
     createdAt: Date.now(),
   };
 
-  const previewText = formatEventWhatsAppMessage(currentMockEvent, config);
+  const previewHtml = formatEventTelegramHtml(currentMockEvent, config);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -111,7 +111,7 @@ export const EventModal: React.FC<EventModalProps> = ({
                 {eventToEdit ? 'Editar Compromisso' : 'Novo Compromisso'}
               </h3>
               <p className="text-xs text-gray-500">
-                Com alerta automático no WhatsApp para não esquecer
+                Com alerta automático no Telegram para ela não esquecer
               </p>
             </div>
           </div>
@@ -132,7 +132,7 @@ export const EventModal: React.FC<EventModalProps> = ({
             <input
               type="text"
               required
-              placeholder="Ex: Aula de Direito Constitucional / Reunião com Cliente / Treino"
+              placeholder="Ex: Aula de Direito / Reunião com Cliente / Treino"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               className="w-full text-sm px-4 py-2.5 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-rose-400 focus:border-rose-400"
@@ -217,7 +217,7 @@ export const EventModal: React.FC<EventModalProps> = ({
             <div>
               <label className="block text-xs font-bold uppercase tracking-wider text-gray-700 mb-1.5 flex items-center gap-1">
                 <BellRing className="w-3.5 h-3.5 text-rose-500" />
-                Alertar no WhatsApp
+                Alertar no Telegram
               </label>
               <select
                 value={reminderTiming}
@@ -289,21 +289,24 @@ export const EventModal: React.FC<EventModalProps> = ({
             />
           </div>
 
-          {/* WhatsApp Preview Toggle */}
+          {/* Telegram Preview Toggle */}
           <div className="pt-2">
             <button
               type="button"
               onClick={() => setShowPreview(!showPreview)}
-              className="text-xs text-rose-600 font-semibold flex items-center gap-1 hover:underline cursor-pointer"
+              className="text-xs text-sky-600 font-semibold flex items-center gap-1 hover:underline cursor-pointer"
             >
               <Eye className="w-3.5 h-3.5" />
-              <span>{showPreview ? 'Ocultar prévia do WhatsApp' : 'Ver como a mensagem chegará no WhatsApp dela'}</span>
+              <span>
+                {showPreview ? 'Ocultar prévia do Telegram' : 'Ver como a mensagem chegará no Telegram dela'}
+              </span>
             </button>
 
             {showPreview && (
-              <div className="mt-3 p-4 bg-emerald-50/70 border border-emerald-200 rounded-2xl text-xs text-gray-800 font-mono whitespace-pre-wrap leading-relaxed shadow-inner">
-                {previewText}
-              </div>
+              <div
+                className="mt-3 p-4 bg-sky-50/70 border border-sky-200 rounded-2xl text-xs text-gray-800 font-sans whitespace-pre-wrap leading-relaxed shadow-inner"
+                dangerouslySetInnerHTML={{ __html: previewHtml }}
+              />
             )}
           </div>
 
