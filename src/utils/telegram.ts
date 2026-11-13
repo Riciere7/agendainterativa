@@ -155,9 +155,13 @@ export async function sendRawTelegramMessage(
         message: 'Lembrete enviado para o Telegram com sucesso!',
       };
     } else {
+      let desc = data.description || 'Não foi possível enviar.';
+      if (desc.toLowerCase().includes('chat not found')) {
+        desc = 'Quase pronto! Sua esposa precisa apenas abrir o bot e clicar no botão "Iniciar" (Start) no Telegram para liberar o envio: https://t.me/agentamor_bot';
+      }
       return {
         success: false,
-        message: `Erro do Telegram: ${data.description || 'Não foi possível enviar.'}`,
+        message: desc,
       };
     }
   } catch (err) {

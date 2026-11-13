@@ -234,6 +234,26 @@ export const TelegramSettingsModal: React.FC<TelegramSettingsModalProps> = ({
             </div>
           )}
 
+          {/* Bot Activation Notice */}
+          <div className="p-3.5 rounded-2xl bg-gradient-to-r from-sky-50 to-blue-50 border border-sky-200 text-xs text-sky-900 flex items-start gap-2.5">
+            <Bot className="w-5 h-5 text-sky-600 shrink-0 mt-0.5" />
+            <div className="space-y-1">
+              <span className="font-bold block">Aviso importante do Telegram:</span>
+              <p className="text-gray-600 leading-relaxed">
+                Por segurança anti-spam, o Telegram só autoriza o bot a enviar mensagens se a sua esposa clicar em <b>Iniciar (Start)</b> uma única vez na conversa com o bot.
+              </p>
+              <a
+                href="https://t.me/agentamor_bot"
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1 font-bold text-sky-700 hover:text-sky-900 underline mt-1"
+              >
+                <span>Clique aqui para abrir @agentamor_bot no Telegram dela</span>
+                <ExternalLink className="w-3.5 h-3.5" />
+              </a>
+            </div>
+          </div>
+
           {/* Toggles */}
           <div className="space-y-2 pt-2 border-t border-gray-100">
             <label className="flex items-center justify-between text-xs text-gray-700 cursor-pointer">

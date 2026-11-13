@@ -71,10 +71,14 @@ export const onRequestPost = async (context: PagesFunctionContext<Env>): Promise
     const tgData = (await tgRes.json()) as { ok: boolean; description?: string };
 
     if (!tgData.ok) {
+      let desc = tgData.description || 'Erro ao enviar mensagem pelo Telegram';
+      if (desc.toLowerCase().includes('chat not found')) {
+        desc = 'Sua esposa precisa apenas abrir o bot e clicar em "Iniciar" (Start) no Telegram: https://t.me/agentamor_bot';
+      }
       return new Response(
         JSON.stringify({
           success: false,
-          error: tgData.description || 'Erro ao enviar mensagem pelo Telegram',
+          error: desc,
         }),
         {
           status: 400,

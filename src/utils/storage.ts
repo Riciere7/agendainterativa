@@ -11,8 +11,8 @@ const EXAMS_KEY = 'agenda_exams_v1';
 export const DEFAULT_TELEGRAM_CONFIG: TelegramConfig = {
   wifeName: 'Amor',
   husbandName: 'Seu Amor',
-  botToken: '',
-  chatId: '',
+  botToken: '9176571908:AAENWsK1VEJ9k5K0wViwNU6zrP8mqk-Jp6k',
+  chatId: '8378531554',
   autoSendEnabled: true,
   soundEnabled: true,
   sweetMessageSuffix: true,
