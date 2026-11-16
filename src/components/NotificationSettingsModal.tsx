@@ -1,14 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { NotificationConfig } from '../types';
 import {
   X,
   Send,
   CheckCircle,
   Key,
-  HelpCircle,
   Volume2,
   Heart,
-  ExternalLink,
   Loader2,
   Bot,
   MessageSquare,
@@ -20,12 +18,22 @@ import {
   Server,
   Layers,
   Sparkles,
+  QrCode,
+  RefreshCw,
+  LogOut,
+  ShieldCheck,
+  CheckCircle2,
+  AlertCircle,
 } from 'lucide-react';
 import {
   checkEvolutionConnection,
+  fetchEvolutionQrCode,
+  logoutEvolutionInstance,
   sendEvolutionTextMessage,
 } from '../utils/evolution';
 import { sendRawTelegramMessage } from '../utils/telegram';
+import { soundEffects } from '../utils/audio';
+import confetti from 'canvas-confetti';
 
 interface NotificationSettingsModalProps {
   isOpen: boolean;
@@ -40,15 +48,36 @@ export const NotificationSettingsModal: React.FC<NotificationSettingsModalProps>
   config,
   onSaveConfig,
 }) => {
-  const [formData, setFormData] = useState<NotificationConfig>({ ...config });
+  const [formData, setFormData] = useState<NotificationConfig>({
+    ...config,
+    evolutionApiUrl: config.evolutionApiUrl || 'https://143.95.186.93',
+    evolutionInstanceName: config.evolutionInstanceName || 'AGENDAINTERATIVA',
+    evolutionApiKey: config.evolutionApiKey || '842CB014124C-4D07-8662-8D06B06659A0',
+    channel: config.channel || 'evolution',
+  });
+
   const [testStatus, setTestStatus] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null);
   const [isTestingSend, setIsTestingSend] = useState(false);
   const [isCheckingConnection, setIsCheckingConnection] = useState(false);
-  const [showEvolutionGuide, setShowEvolutionGuide] = useState(false);
-  const [showTelegramGuide, setShowTelegramGuide] = useState(false);
+  const [isLoadingQr, setIsLoadingQr] = useState(false);
+  const [qrCodeData, setQrCodeData] = useState<string | null>(null);
+  const [connectionState, setConnectionState] = useState<'open' | 'close' | 'connecting' | 'unknown'>('unknown');
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [showApiKey, setShowApiKey] = useState(false);
 
-  if (!isOpen) return null;
+  const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Verifica status da conexão ao abrir o modal
+  useEffect(() => {
+    if (isOpen) {
+      handleCheckConnection(false);
+    } else {
+      if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+    }
+    return () => {
+      if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+    };
+  }, [isOpen]);
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
@@ -56,44 +85,120 @@ export const NotificationSettingsModal: React.FC<NotificationSettingsModalProps>
     onClose();
   };
 
-  const handleCheckEvolutionConnection = async () => {
+  const handleCheckConnection = async (showFeedback = true) => {
     setIsCheckingConnection(true);
-    setTestStatus(null);
-
-    if (!formData.evolutionApiUrl.trim()) {
-      setTestStatus({
-        type: 'error',
-        message: 'Por favor, informe a URL da sua Evolution API primeiro.',
-      });
-      setIsCheckingConnection(false);
-      return;
-    }
+    if (showFeedback) setTestStatus(null);
 
     try {
       const res = await checkEvolutionConnection(formData);
+      const state = (res.state?.toLowerCase() || 'unknown') as 'open' | 'close' | 'connecting' | 'unknown';
+      setConnectionState(state);
+
       if (res.isOpen) {
-        setTestStatus({
-          type: 'success',
-          message: `Conexão bem-sucedida! Instância "${formData.evolutionInstanceName || 'agenda'}" está online e conectada ao WhatsApp! 🟢`,
-        });
-      } else if (res.success) {
+        setQrCodeData(null);
+        if (pollIntervalRef.current) {
+          clearInterval(pollIntervalRef.current);
+          pollIntervalRef.current = null;
+        }
+        if (showFeedback) {
+          setTestStatus({
+            type: 'success',
+            message: 'Instância AGENDAINTERATIVA está conectada e pronta no WhatsApp! 🟢',
+          });
+        }
+      } else if (showFeedback) {
         setTestStatus({
           type: 'info',
-          message: `Instância encontrada, mas status atual é: "${res.state}". Se necessário, abra o painel da Evolution API e escaneie o QR Code. 🟡`,
+          message: `Status da instância: ${res.state}. Escaneie o QR Code abaixo para conectar o WhatsApp.`,
         });
+      }
+    } catch {
+      setConnectionState('unknown');
+      if (showFeedback) {
+        setTestStatus({
+          type: 'error',
+          message: 'Falha ao verificar status da Evolution API.',
+        });
+      }
+    } finally {
+      setIsCheckingConnection(false);
+    }
+  };
+
+  const handleFetchQrCode = async () => {
+    setIsLoadingQr(true);
+    setTestStatus(null);
+
+    try {
+      const res = await fetchEvolutionQrCode(formData);
+      if (res.success && res.base64) {
+        setQrCodeData(res.base64);
+        setTestStatus({
+          type: 'info',
+          message: 'QR Code pronto! Abra o WhatsApp no celular e aponte a câmera para conectar.',
+        });
+
+        // Inicia polling a cada 3 segundos para detectar quando o usuário ler o QR Code
+        if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+        pollIntervalRef.current = setInterval(async () => {
+          const statusRes = await checkEvolutionConnection(formData);
+          if (statusRes.isOpen) {
+            setConnectionState('open');
+            setQrCodeData(null);
+            if (pollIntervalRef.current) {
+              clearInterval(pollIntervalRef.current);
+              pollIntervalRef.current = null;
+            }
+            soundEffects.playSuccess();
+            confetti({
+              particleCount: 80,
+              spread: 70,
+              origin: { y: 0.6 },
+              colors: ['#10b981', '#059669', '#34d399', '#6ee7b7'],
+            });
+            setTestStatus({
+              type: 'success',
+              message: '🎉 WhatsApp conectado com sucesso via Evolution API!',
+            });
+          }
+        }, 3000);
       } else {
         setTestStatus({
           type: 'error',
-          message: res.message || 'Falha ao verificar conexão com a Evolution API.',
+          message: res.message || 'Não foi possível gerar o QR Code. Verifique se a instância já está conectada.',
         });
+        handleCheckConnection(false);
       }
     } catch {
       setTestStatus({
         type: 'error',
-        message: 'Erro inesperado ao consultar a Evolution API.',
+        message: 'Erro ao solicitar QR Code à Evolution API.',
       });
     } finally {
-      setIsCheckingConnection(false);
+      setIsLoadingQr(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    if (!confirm('Deseja realmente desconectar este WhatsApp da instância AGENDAINTERATIVA?')) {
+      return;
+    }
+    setIsLoggingOut(true);
+    try {
+      await logoutEvolutionInstance(formData);
+      setConnectionState('close');
+      setQrCodeData(null);
+      setTestStatus({
+        type: 'info',
+        message: 'WhatsApp desconectado. Gere um novo QR Code para reconectar quando quiser.',
+      });
+    } catch {
+      setTestStatus({
+        type: 'error',
+        message: 'Erro ao desconectar instância.',
+      });
+    } finally {
+      setIsLoggingOut(false);
     }
   };
 
@@ -101,19 +206,10 @@ export const NotificationSettingsModal: React.FC<NotificationSettingsModalProps>
     setIsTestingSend(true);
     setTestStatus(null);
 
-    if (!formData.evolutionApiUrl.trim()) {
-      setTestStatus({
-        type: 'error',
-        message: 'Informe a URL da Evolution API antes de testar o envio.',
-      });
-      setIsTestingSend(false);
-      return;
-    }
-
     if (!formData.whatsappNumber.trim()) {
       setTestStatus({
         type: 'error',
-        message: 'Informe o número do WhatsApp da esposa antes de testar.',
+        message: 'Informe o número do WhatsApp da esposa antes de testar o envio.',
       });
       setIsTestingSend(false);
       return;
@@ -122,17 +218,18 @@ export const NotificationSettingsModal: React.FC<NotificationSettingsModalProps>
     const testMessage =
       `✨ *TESTE DA SUA AGENDA INTERATIVA NO WHATSAPP* ✨\n\n` +
       `Oi, *${formData.wifeName || 'meu amor'}*! 💕\n` +
-      `Este é um teste oficial de notificação via *Evolution API*!\n\n` +
-      `🚀 *Seus lembretes estão ativos:*\n` +
-      `• Alertas automáticos dos seus estudos e trabalhos\n` +
-      `• Notificações no horário certo direto no seu WhatsApp\n` +
-      `• Roteiro diário e bilhetinhos especiais\n\n` +
+      `Seus lembretes automáticos estão ativos com sucesso via *Evolution API*!\n\n` +
+      `🚀 *O que você receberá aqui:*\n` +
+      `• Alertas dos seus estudos, aulas e provas\n` +
+      `• Avisos de compromissos e reuniões no horário certo\n` +
+      `• Roteiro do seu dia e bilhetinhos especiais de amor\n\n` +
       `Com todo o meu amor e carinho,\n` +
       `*${formData.husbandName || 'Seu Marido'}* ❤️`;
 
     try {
       const res = await sendEvolutionTextMessage(formData.whatsappNumber, testMessage, formData);
       if (res.success) {
+        soundEffects.playSuccess();
         setTestStatus({
           type: 'success',
           message: 'Mensagem de teste enviada com sucesso no WhatsApp dela! Verifique o aplicativo. 📱✨',
@@ -169,7 +266,6 @@ export const NotificationSettingsModal: React.FC<NotificationSettingsModalProps>
     const testMessage =
       `✨ <b>TESTE DA SUA AGENDA INTERATIVA NO TELEGRAM</b> ✨\n\n` +
       `Oi, <b>${formData.wifeName || 'meu amor'}</b>! 💕\n` +
-      `Este é um teste do seu bot oficial de lembretes no Telegram!\n\n` +
       `Com carinho,\n` +
       `<b>${formData.husbandName || 'Seu Marido'}</b> ❤️`;
 
@@ -178,7 +274,7 @@ export const NotificationSettingsModal: React.FC<NotificationSettingsModalProps>
       if (res.success) {
         setTestStatus({
           type: 'success',
-          message: 'Mensagem de teste enviada com sucesso no Telegram!',
+          message: 'Mensagem de teste enviada no Telegram!',
         });
       } else {
         setTestStatus({
@@ -196,7 +292,11 @@ export const NotificationSettingsModal: React.FC<NotificationSettingsModalProps>
     }
   };
 
+  const isConnected = connectionState === 'open';
+  const isConnecting = connectionState === 'connecting';
   const channel = formData.channel || 'evolution';
+
+  if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-fade-in">
@@ -208,9 +308,9 @@ export const NotificationSettingsModal: React.FC<NotificationSettingsModalProps>
               <Smartphone className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="text-lg font-bold text-gray-900">Configurações de Alertas & Notificações</h3>
+              <h3 className="text-lg font-bold text-gray-900">Configurações de Alertas & WhatsApp</h3>
               <p className="text-xs text-gray-500">
-                Integração com Evolution API (WhatsApp) e Telegram para sua esposa
+                Integração com Evolution API oficial para envio de lembretes no WhatsApp
               </p>
             </div>
           </div>
@@ -232,7 +332,7 @@ export const NotificationSettingsModal: React.FC<NotificationSettingsModalProps>
               <input
                 type="text"
                 required
-                placeholder="Ex: Danielli, Mari, Meu Amor..."
+                placeholder="Ex: Danielli, Meu Amor..."
                 value={formData.wifeName}
                 onChange={(e) => setFormData({ ...formData, wifeName: e.target.value })}
                 className="w-full text-xs sm:text-sm px-3.5 py-2.5 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-emerald-400"
@@ -301,11 +401,11 @@ export const NotificationSettingsModal: React.FC<NotificationSettingsModalProps>
                     <span>Telegram</span>
                   </div>
                   <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-sky-100 text-sky-800">
-                    Bot Oficial
+                    Bot
                   </span>
                 </div>
                 <p className="text-[11px] text-gray-500">
-                  Mensagens formatadas pelo bot no Telegram
+                  Canal alternativo via bot do Telegram
                 </p>
               </button>
 
@@ -325,315 +425,311 @@ export const NotificationSettingsModal: React.FC<NotificationSettingsModalProps>
                     <span>Ambos</span>
                   </div>
                   <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-indigo-100 text-indigo-800">
-                    WhatsApp + TG
+                    Simultâneo
                   </span>
                 </div>
                 <p className="text-[11px] text-gray-500">
-                  Envia nos dois canais simultaneamente
+                  Envia no WhatsApp e no Telegram
                 </p>
               </button>
             </div>
           </div>
 
-          {/* Evolution API Configuration Card */}
-          {(channel === 'evolution' || channel === 'both') && (
-            <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-emerald-50/60 to-teal-50/40 border border-emerald-200 space-y-4 animate-fade-in">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div className="p-1.5 rounded-xl bg-emerald-600 text-white">
-                    <Server className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <h4 className="text-xs sm:text-sm font-bold text-emerald-950">
-                      Parâmetros da Evolution API (WhatsApp)
-                    </h4>
-                    <p className="text-[11px] text-emerald-700">
-                      Integração oficial de envio de mensagens via WhatsApp
-                    </p>
-                  </div>
+          {/* QR Code & Live Connection Status Section (Always prominent for WhatsApp) */}
+          <div className="p-4 sm:p-5 rounded-3xl bg-gradient-to-br from-emerald-50/80 via-teal-50/40 to-white border-2 border-emerald-200 shadow-sm space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-emerald-600 text-white shadow-sm">
+                  <QrCode className="w-5 h-5" />
                 </div>
-
-                <button
-                  type="button"
-                  onClick={() => setShowEvolutionGuide(!showEvolutionGuide)}
-                  className="text-xs text-emerald-700 hover:text-emerald-900 font-bold underline flex items-center gap-1 cursor-pointer"
-                >
-                  <HelpCircle className="w-3.5 h-3.5" />
-                  <span>{showEvolutionGuide ? 'Ocultar Guia' : 'Como Configurar'}</span>
-                </button>
-              </div>
-
-              {/* Collapsible Guide */}
-              {showEvolutionGuide && (
-                <div className="p-3.5 rounded-xl bg-white border border-emerald-200 text-xs text-gray-700 space-y-2.5 animate-fade-in">
-                  <div className="font-bold text-emerald-900 flex items-center gap-1.5">
-                    <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
-                    <span>Como obter os dados na sua Evolution API:</span>
-                  </div>
-                  <ol className="list-decimal list-inside space-y-1.5 text-gray-600 leading-relaxed text-[11px] sm:text-xs">
-                    <li>
-                      <strong>URL da API:</strong> O endereço do seu servidor onde a Evolution API está rodando (ex:{' '}
-                      <code className="bg-emerald-50 px-1 py-0.5 rounded text-emerald-900 font-mono">
-                        https://api.meuservidor.com
-                      </code>{' '}
-                      ou{' '}
-                      <code className="bg-emerald-50 px-1 py-0.5 rounded text-emerald-900 font-mono">
-                        http://localhost:8080
-                      </code>
-                      ).
-                    </li>
-                    <li>
-                      <strong>API Key (Global ou da Instância):</strong> A chave definida no seu{' '}
-                      <code className="bg-emerald-50 px-1 py-0.5 rounded text-emerald-900 font-mono">
-                        AUTHENTICATION_API_KEY
-                      </code>{' '}
-                      da Evolution API.
-                    </li>
-                    <li>
-                      <strong>Nome da Instância:</strong> O nome da instância criada (ex:{' '}
-                      <code className="bg-emerald-50 px-1 py-0.5 rounded text-emerald-900 font-mono">agenda</code>).
-                    </li>
-                    <li>
-                      <strong>WhatsApp da Esposa:</strong> O número do WhatsApp com DDD (o DDI 55 do Brasil é incluído automaticamente caso não informado).
-                    </li>
-                  </ol>
-                </div>
-              )}
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {/* Evolution API URL */}
-                <div className="sm:col-span-2">
-                  <label className="block text-[11px] font-bold uppercase tracking-wider text-emerald-900 mb-1 flex items-center gap-1">
-                    <Globe className="w-3 h-3 text-emerald-600" />
-                    URL da Evolution API *
-                  </label>
-                  <input
-                    type="url"
-                    required={channel === 'evolution' || channel === 'both'}
-                    placeholder="Ex: https://api.meudominio.com.br ou http://localhost:8080"
-                    value={formData.evolutionApiUrl}
-                    onChange={(e) => setFormData({ ...formData, evolutionApiUrl: e.target.value })}
-                    className="w-full text-xs sm:text-sm px-3.5 py-2.5 rounded-xl border border-emerald-300 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-400 font-mono"
-                  />
-                </div>
-
-                {/* Evolution API Key */}
                 <div>
-                  <label className="block text-[11px] font-bold uppercase tracking-wider text-emerald-900 mb-1 flex items-center justify-between">
-                    <span className="flex items-center gap-1">
-                      <Key className="w-3 h-3 text-emerald-600" />
-                      API Key (apikey) *
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setShowApiKey(!showApiKey)}
-                      className="text-[10px] text-emerald-700 hover:text-emerald-900 flex items-center gap-0.5 cursor-pointer"
-                    >
-                      {showApiKey ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
-                      <span>{showApiKey ? 'Ocultar' : 'Mostrar'}</span>
-                    </button>
-                  </label>
-                  <input
-                    type={showApiKey ? 'text' : 'password'}
-                    placeholder="Chave de autenticação"
-                    value={formData.evolutionApiKey}
-                    onChange={(e) => setFormData({ ...formData, evolutionApiKey: e.target.value })}
-                    className="w-full text-xs sm:text-sm px-3.5 py-2.5 rounded-xl border border-emerald-300 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-400 font-mono"
-                  />
-                </div>
-
-                {/* Instance Name */}
-                <div>
-                  <label className="block text-[11px] font-bold uppercase tracking-wider text-emerald-900 mb-1 flex items-center gap-1">
-                    <Server className="w-3 h-3 text-emerald-600" />
-                    Nome da Instância *
-                  </label>
-                  <input
-                    type="text"
-                    required={channel === 'evolution' || channel === 'both'}
-                    placeholder="Ex: agenda ou esposa"
-                    value={formData.evolutionInstanceName}
-                    onChange={(e) => setFormData({ ...formData, evolutionInstanceName: e.target.value })}
-                    className="w-full text-xs sm:text-sm px-3.5 py-2.5 rounded-xl border border-emerald-300 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-400 font-mono"
-                  />
-                </div>
-
-                {/* Recipient WhatsApp Phone */}
-                <div className="sm:col-span-2">
-                  <label className="block text-[11px] font-bold uppercase tracking-wider text-emerald-900 mb-1 flex items-center gap-1">
-                    <Smartphone className="w-3 h-3 text-emerald-600" />
-                    Número do WhatsApp da Esposa *
-                  </label>
-                  <input
-                    type="text"
-                    required={channel === 'evolution' || channel === 'both'}
-                    placeholder="Ex: (11) 98765-4321 ou 5511987654321"
-                    value={formData.whatsappNumber}
-                    onChange={(e) => setFormData({ ...formData, whatsappNumber: e.target.value })}
-                    className="w-full text-xs sm:text-sm px-3.5 py-2.5 rounded-xl border border-emerald-300 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-400 font-mono"
-                  />
-                  <p className="text-[11px] text-emerald-700 mt-1">
-                    Número de telefone com DDD que receberá os alertas no WhatsApp.
+                  <h4 className="text-sm font-bold text-emerald-950 flex items-center gap-2">
+                    <span>Conexão WhatsApp (Evolution API)</span>
+                    {isConnected ? (
+                      <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300">
+                        <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                        Conectado 🟢
+                      </span>
+                    ) : isConnecting ? (
+                      <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-300">
+                        <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+                        Conectando / Aguardando QR Code 🟡
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 border border-rose-300">
+                        <span className="w-2 h-2 rounded-full bg-rose-500" />
+                        Desconectado 🔴
+                      </span>
+                    )}
+                  </h4>
+                  <p className="text-[11px] text-emerald-800">
+                    Instância: <strong className="font-mono">{formData.evolutionInstanceName || 'AGENDAINTERATIVA'}</strong>
                   </p>
                 </div>
               </div>
 
-              {/* Action Buttons for Evolution */}
-              <div className="pt-2 flex flex-col sm:flex-row items-center gap-2">
+              <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  onClick={handleCheckEvolutionConnection}
-                  disabled={isCheckingConnection || !formData.evolutionApiUrl}
-                  className="w-full sm:w-1/2 py-2.5 px-3 rounded-xl border border-emerald-400 bg-white hover:bg-emerald-50 text-emerald-800 text-xs font-bold flex items-center justify-center gap-2 transition-colors cursor-pointer disabled:opacity-50"
+                  onClick={() => handleCheckConnection(true)}
+                  disabled={isCheckingConnection}
+                  className="p-2 rounded-xl bg-white border border-emerald-300 hover:bg-emerald-50 text-emerald-800 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+                  title="Atualizar status da conexão"
                 >
-                  {isCheckingConnection ? (
-                    <>
-                      <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-600" />
-                      <span>Verificando Instância...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Server className="w-3.5 h-3.5 text-emerald-600" />
-                      <span>Verificar Conexão da Instância</span>
-                    </>
-                  )}
-                </button>
-
-                <button
-                  type="button"
-                  onClick={handleTestWhatsAppSend}
-                  disabled={isTestingSend || !formData.evolutionApiUrl || !formData.whatsappNumber}
-                  className="w-full sm:w-1/2 py-2.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center justify-center gap-2 shadow-sm shadow-emerald-200 transition-colors cursor-pointer disabled:opacity-50"
-                >
-                  {isTestingSend ? (
-                    <>
-                      <Loader2 className="w-3.5 h-3.5 animate-spin text-white" />
-                      <span>Enviando no WhatsApp...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Send className="w-3.5 h-3.5" />
-                      <span>Testar Envio no WhatsApp</span>
-                    </>
-                  )}
+                  <RefreshCw className={`w-3.5 h-3.5 ${isCheckingConnection ? 'animate-spin text-emerald-600' : ''}`} />
+                  <span className="hidden sm:inline">Verificar</span>
                 </button>
               </div>
             </div>
-          )}
 
-          {/* Telegram Configuration Card */}
-          {(channel === 'telegram' || channel === 'both') && (
-            <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-sky-50/60 to-blue-50/40 border border-sky-200 space-y-4 animate-fade-in">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div className="p-1.5 rounded-xl bg-sky-600 text-white">
-                    <Bot className="w-4 h-4" />
+            {/* Connection Status Box */}
+            {isConnected ? (
+              <div className="p-4 rounded-2xl bg-white border border-emerald-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
+                    <CheckCircle2 className="w-6 h-6" />
                   </div>
                   <div>
-                    <h4 className="text-xs sm:text-sm font-bold text-sky-950">
-                      Parâmetros do Telegram Bot
-                    </h4>
-                    <p className="text-[11px] text-sky-700">
-                      Canal de alertas pelo bot do Telegram
-                    </p>
+                    <span className="text-xs font-bold text-emerald-950 block">
+                      WhatsApp Conectado e Pronto para Envio! 🟢
+                    </span>
+                    <span className="text-[11px] text-gray-500 block">
+                      Todos os avisos serão enviados automaticamente para o número cadastrado.
+                    </span>
                   </div>
                 </div>
 
                 <button
                   type="button"
-                  onClick={() => setShowTelegramGuide(!showTelegramGuide)}
-                  className="text-xs text-sky-700 hover:text-sky-900 font-bold underline flex items-center gap-1 cursor-pointer"
+                  onClick={handleLogout}
+                  disabled={isLoggingOut}
+                  className="px-3 py-1.5 rounded-xl border border-rose-200 text-rose-700 hover:bg-rose-50 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer shrink-0 disabled:opacity-50"
+                  title="Desconectar este WhatsApp"
                 >
-                  <HelpCircle className="w-3.5 h-3.5" />
-                  <span>{showTelegramGuide ? 'Ocultar Guia' : 'Como Obter Token'}</span>
+                  <LogOut className="w-3.5 h-3.5" />
+                  <span>Desconectar</span>
                 </button>
               </div>
+            ) : (
+              <div className="p-4 rounded-2xl bg-white border border-emerald-200 space-y-3 shadow-xs">
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pb-3 border-b border-gray-100">
+                  <div className="text-center sm:text-left">
+                    <span className="text-xs font-bold text-gray-900 block flex items-center gap-1.5 justify-center sm:justify-start">
+                      <AlertCircle className="w-4 h-4 text-amber-500" />
+                      <span>WhatsApp Desconectado</span>
+                    </span>
+                    <span className="text-[11px] text-gray-500 block">
+                      Clique no botão ao lado para exibir o QR Code e conectar seu WhatsApp
+                    </span>
+                  </div>
 
-              {/* Collapsible Telegram Guide */}
-              {showTelegramGuide && (
-                <div className="p-3.5 rounded-xl bg-white border border-sky-200 text-xs text-gray-700 space-y-2 animate-fade-in text-[11px] sm:text-xs">
-                  <p>
-                    1. Crie um bot no Telegram com o{' '}
-                    <a
-                      href="https://t.me/BotFather"
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-sky-600 font-bold underline inline-flex items-center gap-0.5"
-                    >
-                      @BotFather <ExternalLink className="w-3 h-3" />
-                    </a>{' '}
-                    e envie <code className="bg-sky-50 px-1 py-0.5 rounded font-mono">/newbot</code> para receber o Token.
-                  </p>
-                  <p>
-                    2. Abra o{' '}
-                    <a
-                      href="https://t.me/userinfobot"
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-sky-600 font-bold underline inline-flex items-center gap-0.5"
-                    >
-                      @userinfobot <ExternalLink className="w-3 h-3" />
-                    </a>{' '}
-                    para descobrir o Chat ID numérico.
-                  </p>
+                  <button
+                    type="button"
+                    onClick={handleFetchQrCode}
+                    disabled={isLoadingQr}
+                    className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center gap-2 shadow-sm shadow-emerald-200 transition-colors cursor-pointer disabled:opacity-50 shrink-0"
+                  >
+                    {isLoadingQr ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        <span>Gerando QR Code...</span>
+                      </>
+                    ) : (
+                      <>
+                        <QrCode className="w-4 h-4" />
+                        <span>{qrCodeData ? 'Atualizar QR Code' : 'Escanear QR Code'}</span>
+                      </>
+                    )}
+                  </button>
                 </div>
-              )}
+
+                {/* QR Code Container */}
+                {qrCodeData && (
+                  <div className="p-4 bg-emerald-50/50 rounded-2xl border border-emerald-200 flex flex-col items-center justify-center space-y-3 animate-fade-in">
+                    <div className="bg-white p-3 rounded-2xl shadow-md border border-gray-100">
+                      <img
+                        src={qrCodeData}
+                        alt="QR Code WhatsApp"
+                        className="w-56 h-56 object-contain rounded-lg"
+                      />
+                    </div>
+
+                    <div className="text-center max-w-sm space-y-1">
+                      <p className="text-xs font-bold text-emerald-950 flex items-center justify-center gap-1">
+                        <Sparkles className="w-3.5 h-3.5 text-emerald-600 animate-spin" />
+                        <span>Aguardando leitura do QR Code...</span>
+                      </p>
+                      <p className="text-[11px] text-gray-600 leading-relaxed">
+                        Abra o WhatsApp &gt; <strong>Aparelhos conectados</strong> &gt; <strong>Conectar um aparelho</strong> e aponte para o código acima. A tela se atualizará automaticamente assim que for lido!
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Evolution API Parameters */}
+          <div className="p-4 sm:p-5 rounded-2xl bg-gray-50/80 border border-gray-200 space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Server className="w-4 h-4 text-emerald-600" />
+                <h4 className="text-xs sm:text-sm font-bold text-gray-900">
+                  Dados da Instância Evolution API
+                </h4>
+              </div>
+              <div className="flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-lg border border-emerald-200">
+                <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                <span>SSL ignorado (Certificado aceito)</span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {/* Recipient WhatsApp Phone (PRIMARY) */}
+              <div className="sm:col-span-2">
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-emerald-900 mb-1 flex items-center gap-1">
+                  <Smartphone className="w-3.5 h-3.5 text-emerald-600" />
+                  Número do WhatsApp da Esposa (com DDD) *
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Ex: (11) 98765-4321 ou 5511987654321"
+                  value={formData.whatsappNumber}
+                  onChange={(e) => setFormData({ ...formData, whatsappNumber: e.target.value })}
+                  className="w-full text-xs sm:text-sm px-3.5 py-2.5 rounded-xl border border-emerald-400 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500 font-mono"
+                />
+                <p className="text-[11px] text-gray-500 mt-1">
+                  O DDI 55 do Brasil é incluído automaticamente ao enviar.
+                </p>
+              </div>
+
+              {/* Evolution API URL */}
+              <div>
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-gray-700 mb-1 flex items-center gap-1">
+                  <Globe className="w-3 h-3 text-gray-500" />
+                  Endereço da Evolution API *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={formData.evolutionApiUrl}
+                  onChange={(e) => setFormData({ ...formData, evolutionApiUrl: e.target.value })}
+                  className="w-full text-xs sm:text-sm px-3.5 py-2.5 rounded-xl border border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-400 font-mono"
+                />
+              </div>
+
+              {/* Instance Name */}
+              <div>
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-gray-700 mb-1 flex items-center gap-1">
+                  <Server className="w-3 h-3 text-gray-500" />
+                  Nome da Instância *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={formData.evolutionInstanceName}
+                  onChange={(e) => setFormData({ ...formData, evolutionInstanceName: e.target.value })}
+                  className="w-full text-xs sm:text-sm px-3.5 py-2.5 rounded-xl border border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-400 font-mono"
+                />
+              </div>
+
+              {/* Evolution API Key / Token */}
+              <div className="sm:col-span-2">
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-gray-700 mb-1 flex items-center justify-between">
+                  <span className="flex items-center gap-1">
+                    <Key className="w-3 h-3 text-gray-500" />
+                    Chave de API (Token / apikey) *
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setShowApiKey(!showApiKey)}
+                    className="text-[10px] text-gray-500 hover:text-gray-800 flex items-center gap-0.5 cursor-pointer"
+                  >
+                    {showApiKey ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+                    <span>{showApiKey ? 'Ocultar' : 'Mostrar'}</span>
+                  </button>
+                </label>
+                <input
+                  type={showApiKey ? 'text' : 'password'}
+                  required
+                  value={formData.evolutionApiKey}
+                  onChange={(e) => setFormData({ ...formData, evolutionApiKey: e.target.value })}
+                  className="w-full text-xs sm:text-sm px-3.5 py-2.5 rounded-xl border border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-400 font-mono"
+                />
+              </div>
+            </div>
+
+            {/* Test WhatsApp Send Button */}
+            <div className="pt-2">
+              <button
+                type="button"
+                onClick={handleTestWhatsAppSend}
+                disabled={isTestingSend || !formData.whatsappNumber}
+                className="w-full py-2.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center justify-center gap-2 shadow-sm shadow-emerald-200 transition-colors cursor-pointer disabled:opacity-50"
+              >
+                {isTestingSend ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin text-white" />
+                    <span>Disparando mensagem teste no WhatsApp...</span>
+                  </>
+                ) : (
+                  <>
+                    <Send className="w-3.5 h-3.5" />
+                    <span>Testar Envio no WhatsApp Dela Agora</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+
+          {/* Telegram Card (Only if Telegram or Both selected) */}
+          {(channel === 'telegram' || channel === 'both') && (
+            <div className="p-4 sm:p-5 rounded-2xl bg-sky-50/60 border border-sky-200 space-y-3 animate-fade-in">
+              <div className="flex items-center gap-2">
+                <Bot className="w-4 h-4 text-sky-600" />
+                <h4 className="text-xs sm:text-sm font-bold text-sky-950">
+                  Telegram Bot (Canal Alternativo)
+                </h4>
+              </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {/* Bot Token */}
-                <div className="sm:col-span-2">
-                  <label className="block text-[11px] font-bold uppercase tracking-wider text-sky-900 mb-1 flex items-center gap-1">
-                    <Key className="w-3 h-3 text-sky-600" />
-                    Telegram Bot Token *
+                <div>
+                  <label className="block text-[11px] font-bold uppercase tracking-wider text-sky-900 mb-1">
+                    Bot Token
                   </label>
                   <input
                     type="text"
-                    required={channel === 'telegram'}
-                    placeholder="Ex: 7123456789:AAHqKlxabcdef..."
+                    placeholder="Ex: 7123456789:AAHqKlx..."
                     value={formData.botToken}
                     onChange={(e) => setFormData({ ...formData, botToken: e.target.value })}
-                    className="w-full text-xs sm:text-sm px-3.5 py-2.5 rounded-xl border border-sky-300 bg-white focus:outline-none focus:ring-2 focus:ring-sky-400 font-mono"
+                    className="w-full text-xs px-3 py-2 rounded-xl border border-sky-300 bg-white font-mono"
                   />
                 </div>
 
-                {/* Chat ID */}
-                <div className="sm:col-span-2">
-                  <label className="block text-[11px] font-bold uppercase tracking-wider text-sky-900 mb-1 flex items-center gap-1">
-                    <MessageSquare className="w-3 h-3 text-sky-600" />
-                    Chat ID da Esposa ou Grupo *
+                <div>
+                  <label className="block text-[11px] font-bold uppercase tracking-wider text-sky-900 mb-1">
+                    Chat ID
                   </label>
                   <input
                     type="text"
-                    required={channel === 'telegram'}
-                    placeholder="Ex: 987654321 ou -100123456789"
+                    placeholder="Ex: 987654321"
                     value={formData.chatId}
                     onChange={(e) => setFormData({ ...formData, chatId: e.target.value })}
-                    className="w-full text-xs sm:text-sm px-3.5 py-2.5 rounded-xl border border-sky-300 bg-white focus:outline-none focus:ring-2 focus:ring-sky-400 font-mono"
+                    className="w-full text-xs px-3 py-2 rounded-xl border border-sky-300 bg-white font-mono"
                   />
                 </div>
               </div>
 
-              {/* Test Button for Telegram */}
-              <div className="pt-2">
-                <button
-                  type="button"
-                  onClick={handleTestTelegramSend}
-                  disabled={isTestingSend || !formData.botToken || !formData.chatId}
-                  className="w-full py-2.5 px-3 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-xs font-bold flex items-center justify-center gap-2 shadow-sm shadow-sky-200 transition-colors cursor-pointer disabled:opacity-50"
-                >
-                  {isTestingSend ? (
-                    <>
-                      <Loader2 className="w-3.5 h-3.5 animate-spin text-white" />
-                      <span>Enviando no Telegram...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Send className="w-3.5 h-3.5" />
-                      <span>Testar Envio no Telegram</span>
-                    </>
-                  )}
-                </button>
-              </div>
+              <button
+                type="button"
+                onClick={handleTestTelegramSend}
+                disabled={isTestingSend || !formData.botToken}
+                className="w-full py-2 px-3 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-xs font-bold flex items-center justify-center gap-2 transition-colors cursor-pointer disabled:opacity-50"
+              >
+                <Send className="w-3.5 h-3.5" />
+                <span>Testar Envio no Telegram</span>
+              </button>
             </div>
           )}
 
@@ -652,7 +748,7 @@ export const NotificationSettingsModal: React.FC<NotificationSettingsModalProps>
                 {testStatus.type === 'success' ? (
                   <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
                 ) : (
-                  <HelpCircle className="w-4 h-4 shrink-0" />
+                  <AlertCircle className="w-4 h-4 shrink-0" />
                 )}
                 <span>{testStatus.message}</span>
               </div>

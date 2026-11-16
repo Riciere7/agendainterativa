@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ThemeId, NotificationConfig } from '../types';
 import { THEMES } from '../utils/theme';
 import {
@@ -12,7 +12,9 @@ import {
   Send,
   Smartphone,
   Bot,
+  QrCode,
 } from 'lucide-react';
+import { checkEvolutionConnection } from '../utils/evolution';
 
 interface NavbarProps {
   activeTab: 'agenda' | 'estudos' | 'habitos' | 'amor';
@@ -38,6 +40,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenNewEvent,
 }) => {
   const [themeMenuOpen, setThemeMenuOpen] = useState(false);
+  const [evolutionConnected, setEvolutionConnected] = useState<boolean | null>(null);
   const themeObj = THEMES[currentTheme];
 
   const themeList: { id: ThemeId; label: string; icon: string }[] = [
@@ -49,12 +52,28 @@ export const Navbar: React.FC<NavbarProps> = ({
   ];
 
   const channel = config.channel || 'evolution';
-  const isConfigured =
-    channel === 'evolution'
-      ? Boolean(config.evolutionApiUrl && config.whatsappNumber)
-      : channel === 'telegram'
-      ? Boolean(config.botToken && config.chatId)
-      : Boolean((config.evolutionApiUrl && config.whatsappNumber) || (config.botToken && config.chatId));
+
+  // Monitora status da conexão com a Evolution API
+  useEffect(() => {
+    let isMounted = true;
+    const verifyStatus = async () => {
+      try {
+        const res = await checkEvolutionConnection(config);
+        if (isMounted) {
+          setEvolutionConnected(res.isOpen || false);
+        }
+      } catch {
+        if (isMounted) setEvolutionConnected(false);
+      }
+    };
+
+    verifyStatus();
+    const interval = setInterval(verifyStatus, 25000);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, [config.evolutionApiUrl, config.evolutionInstanceName, config.evolutionApiKey]);
 
   return (
     <header className="sticky top-0 z-40 bg-white/80 backdrop-blur-xl border-b border-gray-100 shadow-xs">
@@ -73,7 +92,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <Heart className="w-4 h-4 fill-rose-500 text-rose-500" />
               </div>
               <p className="text-[11px] text-gray-500 hidden sm:block">
-                Alertas no WhatsApp (Evolution API) & Foco diário
+                Alertas automáticos via Evolution API (WhatsApp) & Foco diário
               </p>
             </div>
           </div>
@@ -181,35 +200,51 @@ export const Navbar: React.FC<NavbarProps> = ({
               <span className="hidden lg:inline">Cloudflare Pages</span>
             </button>
 
-            {/* Notification Settings button */}
-            <button
-              onClick={onOpenSettings}
-              className={`p-2 sm:px-3 sm:py-2 rounded-xl border text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer ${
-                isConfigured
-                  ? channel === 'evolution'
-                    ? 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
-                    : channel === 'telegram'
-                    ? 'border-sky-200 bg-sky-50 text-sky-700 hover:bg-sky-100'
-                    : 'border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100'
-                  : 'border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100 animate-pulse'
-              }`}
-              title="Configurações de Alertas (Evolution API / Telegram)"
-            >
-              {channel === 'evolution' ? (
-                <Smartphone className="w-4 h-4 text-emerald-600" />
-              ) : channel === 'telegram' ? (
-                <Bot className="w-4 h-4 text-sky-600" />
-              ) : (
-                <Send className="w-4 h-4 text-indigo-600" />
-              )}
-              <span className="hidden sm:inline">
-                {channel === 'evolution'
-                  ? 'WhatsApp'
-                  : channel === 'telegram'
-                  ? 'Telegram'
-                  : 'WhatsApp & TG'}
-              </span>
-            </button>
+            {/* WhatsApp Evolution Status & Settings button */}
+            {channel === 'evolution' ? (
+              <button
+                onClick={onOpenSettings}
+                className={`p-2 sm:px-3 sm:py-2 rounded-xl border text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer ${
+                  evolutionConnected
+                    ? 'border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100'
+                    : 'border-rose-300 bg-rose-50 text-rose-800 hover:bg-rose-100 animate-pulse'
+                }`}
+                title={
+                  evolutionConnected
+                    ? 'WhatsApp Conectado (Instância AGENDAINTERATIVA online)'
+                    : 'WhatsApp Desconectado: Clique para escanear o QR Code!'
+                }
+              >
+                {evolutionConnected ? (
+                  <>
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0 animate-ping" />
+                    <Smartphone className="w-4 h-4 text-emerald-600" />
+                    <span className="hidden sm:inline">WhatsApp Conectado 🟢</span>
+                  </>
+                ) : (
+                  <>
+                    <span className="w-2 h-2 rounded-full bg-rose-500 shrink-0" />
+                    <QrCode className="w-4 h-4 text-rose-600" />
+                    <span className="hidden sm:inline">Escanear QR Code 🔴</span>
+                  </>
+                )}
+              </button>
+            ) : (
+              <button
+                onClick={onOpenSettings}
+                className="p-2 sm:px-3 sm:py-2 rounded-xl border border-sky-200 bg-sky-50 text-sky-700 hover:bg-sky-100 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+                title="Configurações de Alertas"
+              >
+                {channel === 'telegram' ? (
+                  <Bot className="w-4 h-4 text-sky-600" />
+                ) : (
+                  <Send className="w-4 h-4 text-indigo-600" />
+                )}
+                <span className="hidden sm:inline">
+                  {channel === 'telegram' ? 'Telegram' : 'WhatsApp & TG'}
+                </span>
+              </button>
+            )}
 
             {/* Add Event Primary CTA */}
             <button

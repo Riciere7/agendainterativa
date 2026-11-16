@@ -111,21 +111,25 @@ export interface EvolutionResult {
   isOpen?: boolean;
 }
 
+export interface QrCodeResult {
+  success: boolean;
+  base64?: string;
+  code?: string;
+  pairingCode?: string;
+  message: string;
+}
+
 /**
  * Verifica o status de conexão da instância na Evolution API
  */
 export async function checkEvolutionConnection(
   config: NotificationConfig
 ): Promise<EvolutionResult> {
-  const apiUrl = cleanUrl(config.evolutionApiUrl || '');
-  const instanceName = (config.evolutionInstanceName || 'agenda').trim();
-  const apiKey = (config.evolutionApiKey || '').trim();
+  const apiUrl = cleanUrl(config.evolutionApiUrl || 'https://143.95.186.93');
+  const instanceName = (config.evolutionInstanceName || 'AGENDAINTERATIVA').trim();
+  const apiKey = (config.evolutionApiKey || '842CB014124C-4D07-8662-8D06B06659A0').trim();
 
-  if (!apiUrl) {
-    return { success: false, message: 'URL da Evolution API não informada.' };
-  }
-
-  // 1. Tentar via Cloudflare Pages Function proxy (/api/send-evolution)
+  // 1. Tentar via backend/proxy (/api/send-evolution)
   try {
     const res = await fetch('/api/send-evolution', {
       method: 'POST',
@@ -150,10 +154,32 @@ export async function checkEvolutionConnection(
       };
     }
   } catch (err) {
-    console.warn('Proxy /api/send-evolution não respondeu, tentando conexão direta...', err);
+    console.warn('Endpoint /api/send-evolution inacessível, tentando proxy local /api/evolution-proxy...', err);
   }
 
-  // 2. Fallback: Conexão direta com a Evolution API
+  // 2. Fallback: Proxy local do Vite
+  try {
+    const proxyRes = await fetch(`/api/evolution-proxy/instance/connectionState/${instanceName}`, {
+      headers: { apikey: apiKey },
+    });
+    if (proxyRes.ok) {
+      const data = await proxyRes.json();
+      const state = data?.instance?.state || data?.state || 'desconhecido';
+      const isOpen = state.toLowerCase() === 'open';
+      return {
+        success: true,
+        state,
+        isOpen,
+        message: isOpen
+          ? 'Instância conectada e pronta no WhatsApp! 🟢'
+          : `Instância status: ${state} 🔴`,
+      };
+    }
+  } catch {
+    // ignore
+  }
+
+  // 3. Fallback: Conexão direta com a Evolution API
   try {
     const directUrl = `${apiUrl}/instance/connectionState/${instanceName}`;
     const directRes = await fetch(directUrl, {
@@ -192,6 +218,132 @@ export async function checkEvolutionConnection(
 }
 
 /**
+ * Busca o QR Code para conectar o WhatsApp na Evolution API
+ */
+export async function fetchEvolutionQrCode(
+  config: NotificationConfig
+): Promise<QrCodeResult> {
+  const apiUrl = cleanUrl(config.evolutionApiUrl || 'https://143.95.186.93');
+  const instanceName = (config.evolutionInstanceName || 'AGENDAINTERATIVA').trim();
+  const apiKey = (config.evolutionApiKey || '842CB014124C-4D07-8662-8D06B06659A0').trim();
+
+  // 1. Tentar via backend/proxy (/api/send-evolution)
+  try {
+    const res = await fetch('/api/send-evolution', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'getQrCode',
+        apiUrl,
+        apiKey,
+        instanceName,
+      }),
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      return {
+        success: data.success,
+        base64: data.base64,
+        code: data.code,
+        pairingCode: data.pairingCode,
+        message: data.message || 'QR Code obtido com sucesso!',
+      };
+    }
+  } catch (err) {
+    console.warn('Falha via proxy /api/send-evolution ao obter QR code', err);
+  }
+
+  // 2. Fallback: Proxy local do Vite
+  try {
+    const proxyRes = await fetch(`/api/evolution-proxy/instance/connect/${instanceName}`, {
+      headers: { apikey: apiKey },
+    });
+    if (proxyRes.ok) {
+      const data = await proxyRes.json();
+      return {
+        success: Boolean(data.base64 || data.code),
+        base64: data.base64,
+        code: data.code,
+        pairingCode: data.pairingCode,
+        message: 'QR Code obtido com sucesso!',
+      };
+    }
+  } catch {
+    // ignore
+  }
+
+  // 3. Fallback: Conexão direta
+  try {
+    const directUrl = `${apiUrl}/instance/connect/${instanceName}`;
+    const directRes = await fetch(directUrl, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        apikey: apiKey,
+      },
+    });
+
+    if (directRes.ok) {
+      const data = await directRes.json();
+      return {
+        success: Boolean(data.base64 || data.code),
+        base64: data.base64,
+        code: data.code,
+        pairingCode: data.pairingCode,
+        message: 'QR Code obtido com sucesso!',
+      };
+    }
+  } catch (err) {
+    console.error('Falha ao obter QR Code:', err);
+  }
+
+  return {
+    success: false,
+    message: 'Não foi possível gerar o QR Code. Verifique se a Evolution API está acessível.',
+  };
+}
+
+/**
+ * Desconecta a instância do WhatsApp (Logout)
+ */
+export async function logoutEvolutionInstance(
+  config: NotificationConfig
+): Promise<{ success: boolean; message: string }> {
+  const apiUrl = cleanUrl(config.evolutionApiUrl || 'https://143.95.186.93');
+  const instanceName = (config.evolutionInstanceName || 'AGENDAINTERATIVA').trim();
+  const apiKey = (config.evolutionApiKey || '842CB014124C-4D07-8662-8D06B06659A0').trim();
+
+  try {
+    const res = await fetch('/api/send-evolution', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'logout',
+        apiUrl,
+        apiKey,
+        instanceName,
+      }),
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      return {
+        success: data.success,
+        message: data.message || 'Desconectado com sucesso.',
+      };
+    }
+  } catch {
+    // ignore
+  }
+
+  return {
+    success: false,
+    message: 'Falha ao desconectar da Evolution API.',
+  };
+}
+
+/**
  * Envia uma mensagem de texto pelo WhatsApp usando a Evolution API
  */
 export async function sendEvolutionTextMessage(
@@ -200,9 +352,9 @@ export async function sendEvolutionTextMessage(
   config: NotificationConfig
 ): Promise<EvolutionResult> {
   const cleanNum = normalizeWhatsAppNumber(phone);
-  const apiUrl = cleanUrl(config.evolutionApiUrl || '');
-  const instanceName = (config.evolutionInstanceName || 'agenda').trim();
-  const apiKey = (config.evolutionApiKey || '').trim();
+  const apiUrl = cleanUrl(config.evolutionApiUrl || 'https://143.95.186.93');
+  const instanceName = (config.evolutionInstanceName || 'AGENDAINTERATIVA').trim();
+  const apiKey = (config.evolutionApiKey || '842CB014124C-4D07-8662-8D06B06659A0').trim();
 
   if (!cleanNum) {
     return {
@@ -211,14 +363,7 @@ export async function sendEvolutionTextMessage(
     };
   }
 
-  if (!apiUrl) {
-    return {
-      success: false,
-      message: 'Configure a URL da Evolution API nas configurações.',
-    };
-  }
-
-  // 1. Tenta envio através da Cloudflare Pages Function (/api/send-evolution)
+  // 1. Tenta envio através do backend/proxy (/api/send-evolution)
   try {
     const response = await fetch('/api/send-evolution', {
       method: 'POST',
@@ -246,10 +391,49 @@ export async function sendEvolutionTextMessage(
       };
     }
   } catch (err) {
-    console.warn('Backend /api/send-evolution inacessível, tentando fetch direto...', err);
+    console.warn('Backend /api/send-evolution inacessível, tentando proxy local...', err);
   }
 
-  // 2. Fallback: Envio direto para a Evolution API pelo navegador
+  // 2. Fallback: Proxy local do Vite (/api/evolution-proxy)
+  try {
+    const endpoint = `/api/evolution-proxy/message/sendText/${instanceName}`;
+    const proxyRes = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        apikey: apiKey,
+      },
+      body: JSON.stringify({
+        number: cleanNum,
+        text,
+        delay: 1200,
+        linkPreview: true,
+      }),
+    });
+
+    const proxyData = await proxyRes.json();
+    if (proxyRes.ok) {
+      return {
+        success: true,
+        message: 'Lembrete enviado para o WhatsApp com sucesso!',
+      };
+    }
+
+    const desc =
+      proxyData?.response?.message ||
+      proxyData?.message ||
+      proxyData?.error ||
+      `Erro HTTP ${proxyRes.status}`;
+
+    return {
+      success: false,
+      message: `Evolution API: ${desc}`,
+    };
+  } catch {
+    // ignore
+  }
+
+  // 3. Fallback: Envio direto
   try {
     const endpoint = `${apiUrl}/message/sendText/${instanceName}`;
     const directRes = await fetch(endpoint, {
@@ -317,7 +501,7 @@ export async function sendNotification(
     }
   }
 
-  // 2. Enviar via Telegram
+  // 2. Enviar via Telegram (Apenas se o usuário tiver selecionado explicitamente)
   if (channel === 'telegram' || channel === 'both') {
     const telegramHtml = formatEventTelegramHtml(event, config);
     const tgRes = await sendRawTelegramMessage(telegramHtml, config);

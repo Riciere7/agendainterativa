@@ -16,14 +16,14 @@ export const DEFAULT_NOTIFICATION_CONFIG: NotificationConfig = {
   husbandName: 'Seu Amor',
 
   // Evolution API (WhatsApp)
-  evolutionApiUrl: '',
-  evolutionApiKey: '',
-  evolutionInstanceName: 'agenda',
+  evolutionApiUrl: 'https://143.95.186.93',
+  evolutionApiKey: '842CB014124C-4D07-8662-8D06B06659A0',
+  evolutionInstanceName: 'AGENDAINTERATIVA',
   whatsappNumber: '',
 
-  // Telegram (Backup)
-  botToken: '9176571908:AAENWsK1VEJ9k5K0wViwNU6zrP8mqk-Jp6k',
-  chatId: '8378531554',
+  // Telegram (Desativado por padrão)
+  botToken: '',
+  chatId: '',
 
   autoSendEnabled: true,
   soundEnabled: true,
@@ -183,7 +183,14 @@ export function loadNotificationConfig(): NotificationConfig {
     // 1. Tenta carregar a versão v2 unificada
     const rawV2 = localStorage.getItem(NOTIFICATION_CONFIG_KEY);
     if (rawV2) {
-      return { ...DEFAULT_NOTIFICATION_CONFIG, ...JSON.parse(rawV2) };
+      const parsed = JSON.parse(rawV2);
+      return {
+        ...DEFAULT_NOTIFICATION_CONFIG,
+        ...parsed,
+        evolutionApiUrl: parsed.evolutionApiUrl || DEFAULT_NOTIFICATION_CONFIG.evolutionApiUrl,
+        evolutionApiKey: parsed.evolutionApiKey || DEFAULT_NOTIFICATION_CONFIG.evolutionApiKey,
+        evolutionInstanceName: parsed.evolutionInstanceName || DEFAULT_NOTIFICATION_CONFIG.evolutionInstanceName,
+      };
     }
 
     // 2. Migração suave de versões anteriores (Telegram ou WhatsApp legado)

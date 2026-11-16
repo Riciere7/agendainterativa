@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { NotificationConfig, AgendaEvent, HabitTracker, ThemeId } from '../types';
 import { getDailyQuote } from '../utils/quotes';
 import { THEMES } from '../utils/theme';
@@ -12,7 +12,9 @@ import {
   Smartphone,
   Bot,
   Send,
+  QrCode,
 } from 'lucide-react';
+import { checkEvolutionConnection } from '../utils/evolution';
 
 interface HeaderHeroProps {
   config: NotificationConfig;
@@ -36,6 +38,7 @@ export const HeaderHero: React.FC<HeaderHeroProps> = ({
   const currentTheme = THEMES[theme];
   const [quoteOffset, setQuoteOffset] = useState(0);
   const dailyQuote = getDailyQuote(quoteOffset);
+  const [evolutionConnected, setEvolutionConnected] = useState<boolean | null>(null);
 
   const hour = new Date().getHours();
   let greeting = 'Bom dia';
@@ -47,14 +50,24 @@ export const HeaderHero: React.FC<HeaderHeroProps> = ({
   const completedToday = todayEvents.filter((e) => e.completed).length;
 
   const channel = config.channel || 'evolution';
-  const isEvolutionConfigured = Boolean(config.evolutionApiUrl && config.whatsappNumber);
-  const isTelegramConfigured = Boolean(config.botToken && config.chatId);
-  const isConfigured =
-    channel === 'evolution'
-      ? isEvolutionConfigured
-      : channel === 'telegram'
-      ? isTelegramConfigured
-      : isEvolutionConfigured || isTelegramConfigured;
+
+  useEffect(() => {
+    let isMounted = true;
+    const verifyStatus = async () => {
+      try {
+        const res = await checkEvolutionConnection(config);
+        if (isMounted) setEvolutionConnected(res.isOpen || false);
+      } catch {
+        if (isMounted) setEvolutionConnected(false);
+      }
+    };
+    verifyStatus();
+    const interval = setInterval(verifyStatus, 30000);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, [config.evolutionApiUrl, config.evolutionInstanceName, config.evolutionApiKey]);
 
   return (
     <div className="w-full mb-8">
@@ -79,9 +92,7 @@ export const HeaderHero: React.FC<HeaderHeroProps> = ({
             </h1>
 
             <p className="text-white/90 text-sm sm:text-base leading-relaxed max-w-xl mb-5">
-              Seu cantinho especial para organizar estudos, trabalho e momentos que importam. Lembretes automáticos direto no seu{' '}
-              {channel === 'evolution' ? 'WhatsApp (via Evolution API)' : channel === 'telegram' ? 'Telegram' : 'WhatsApp e Telegram'}{' '}
-              para você brilhar sem estresse!
+              Seu cantinho especial para organizar estudos, trabalho e momentos que importam. Lembretes automáticos e carinhosos enviados via WhatsApp para você brilhar sem estresse!
             </p>
 
             {/* Quick Metrics Badges */}
@@ -149,45 +160,40 @@ export const HeaderHero: React.FC<HeaderHeroProps> = ({
           </div>
         </div>
 
-        {/* Alert Status Pill */}
+        {/* Real-Time Alert Status Pill */}
         <div className="mt-5 pt-4 border-t border-white/20 flex flex-wrap items-center justify-between gap-3 text-xs text-white/90">
           <div className="flex items-center gap-2">
             <span
               className={`w-2.5 h-2.5 rounded-full ${
-                isConfigured ? 'bg-emerald-300 animate-ping' : 'bg-amber-300'
+                evolutionConnected
+                  ? 'bg-emerald-300 animate-ping'
+                  : 'bg-rose-400'
               }`}
             />
-            <span className="flex items-center gap-1.5">
-              {channel === 'evolution' ? (
-                <Smartphone className="w-3.5 h-3.5 text-emerald-200" />
-              ) : channel === 'telegram' ? (
-                <Bot className="w-3.5 h-3.5 text-sky-200" />
+            <span className="flex items-center gap-1.5 font-medium">
+              {evolutionConnected ? (
+                <>
+                  <Smartphone className="w-3.5 h-3.5 text-emerald-200" />
+                  <span>
+                    WhatsApp Conectado (Instância: <strong>{config.evolutionInstanceName || 'AGENDAINTERATIVA'}</strong>) 🟢 • Alertas automáticos ativos
+                  </span>
+                </>
               ) : (
-                <Send className="w-3.5 h-3.5 text-indigo-200" />
-              )}
-              {isConfigured ? (
-                channel === 'evolution' ? (
-                  <>
-                    WhatsApp Evolution API ativo (Instância: <strong>{config.evolutionInstanceName || 'agenda'}</strong>) • Alertas automáticos
-                  </>
-                ) : channel === 'telegram' ? (
-                  <>
-                    Telegram Bot ativo (Chat ID: <strong>{config.chatId}</strong>) • Alertas automáticos
-                  </>
-                ) : (
-                  <>WhatsApp Evolution & Telegram ativos • Alertas automáticos</>
-                )
-              ) : (
-                <>Alertas ainda não configurados. Conecte sua Evolution API em 1 minuto!</>
+                <>
+                  <QrCode className="w-3.5 h-3.5 text-rose-200" />
+                  <span>
+                    WhatsApp Desconectado 🔴 • Escaneie o QR Code para ativar o envio automático
+                  </span>
+                </>
               )}
             </span>
           </div>
 
           <button
             onClick={onOpenSettings}
-            className="underline hover:text-white cursor-pointer transition-colors"
+            className="underline hover:text-white cursor-pointer transition-colors font-bold"
           >
-            {isConfigured ? 'Gerenciar configurações de alertas' : 'Configurar Evolution API agora →'}
+            {evolutionConnected ? 'Gerenciar WhatsApp & Alertas' : 'Escanear QR Code agora →'}
           </button>
         </div>
       </div>

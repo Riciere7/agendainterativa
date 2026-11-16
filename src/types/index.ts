@@ -37,15 +37,15 @@ export interface NotificationConfig {
   husbandName: string;
 
   // Evolution API (WhatsApp)
-  evolutionApiUrl: string; // Ex: https://api.meudominio.com.br ou http://localhost:8080
-  evolutionApiKey: string; // Chave de API / apikey
-  evolutionInstanceName: string; // Nome da instância, ex: agenda
+  evolutionApiUrl: string; // Ex: https://143.95.186.93
+  evolutionApiKey: string; // Chave de API / Token: 842CB014124C-4D07-8662-8D06B06659A0
+  evolutionInstanceName: string; // Nome da instância: AGENDAINTERATIVA
   whatsappNumber: string; // WhatsApp de destino (com DDD), ex: (11) 99999-9999 ou 5511999999999
 
-  // Telegram (Canal alternativo / redundante)
-  botToken: string; // Ex: 123456789:ABCdef...
-  chatId: string; // Ex: 987654321
-  topicId?: string; // opcional
+  // Telegram (Desativado por padrão)
+  botToken: string;
+  chatId: string;
+  topicId?: string;
 
   autoSendEnabled: boolean;
   soundEnabled: boolean;

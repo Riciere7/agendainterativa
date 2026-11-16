@@ -41,7 +41,7 @@ export const onRequestPost = async (context: PagesFunctionContext<Env>): Promise
 
   try {
     const body = (await context.request.json()) as {
-      action?: 'sendText' | 'checkConnection';
+      action?: 'sendText' | 'checkConnection' | 'getQrCode' | 'logout';
       apiUrl?: string;
       apiKey?: string;
       instanceName?: string;
@@ -51,9 +51,9 @@ export const onRequestPost = async (context: PagesFunctionContext<Env>): Promise
     };
 
     const action = body.action || 'sendText';
-    const rawApiUrl = body.apiUrl || context.env.EVOLUTION_API_URL || '';
-    const apiKey = (body.apiKey || context.env.EVOLUTION_API_KEY || '').trim();
-    const instanceName = (body.instanceName || context.env.EVOLUTION_INSTANCE_NAME || 'agenda').trim();
+    const rawApiUrl = body.apiUrl || context.env.EVOLUTION_API_URL || 'https://143.95.186.93';
+    const apiKey = (body.apiKey || context.env.EVOLUTION_API_KEY || '842CB014124C-4D07-8662-8D06B06659A0').trim();
+    const instanceName = (body.instanceName || context.env.EVOLUTION_INSTANCE_NAME || 'AGENDAINTERATIVA').trim();
 
     if (!rawApiUrl) {
       return new Response(
@@ -77,7 +77,7 @@ export const onRequestPost = async (context: PagesFunctionContext<Env>): Promise
         });
 
         const evoData = (await evoRes.json()) as {
-          instance?: { state?: string };
+          instance?: { state?: string; instanceName?: string };
           state?: string;
           status?: number;
           error?: string;
@@ -92,8 +92,9 @@ export const onRequestPost = async (context: PagesFunctionContext<Env>): Promise
             success: evoRes.ok,
             state,
             isOpen,
+            instanceName,
             message: isOpen
-              ? 'Instância conectada e pronta no WhatsApp!'
+              ? 'Instância conectada e pronta no WhatsApp! 🟢'
               : `Instância status: ${state}`,
             raw: evoData,
           }),
@@ -108,7 +109,83 @@ export const onRequestPost = async (context: PagesFunctionContext<Env>): Promise
       }
     }
 
-    // 2. Ação: Enviar Mensagem de Texto
+    // 2. Ação: Obter QR Code para Leitura no WhatsApp
+    if (action === 'getQrCode') {
+      const qrUrl = `${apiUrl}/instance/connect/${instanceName}`;
+      try {
+        const evoRes = await fetch(qrUrl, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            apikey: apiKey,
+          },
+        });
+
+        const evoData = (await evoRes.json()) as {
+          base64?: string;
+          code?: string;
+          pairingCode?: string;
+          count?: number;
+          error?: string;
+          message?: string;
+        };
+
+        const base64 = evoData?.base64 || '';
+        const code = evoData?.code || '';
+
+        return new Response(
+          JSON.stringify({
+            success: evoRes.ok && Boolean(base64 || code),
+            base64,
+            code,
+            pairingCode: evoData?.pairingCode || null,
+            message: base64
+              ? 'QR Code gerado com sucesso! Escaneie com o WhatsApp da sua esposa.'
+              : 'QR Code indisponível ou instância já conectada.',
+            raw: evoData,
+          }),
+          { headers: jsonHeaders }
+        );
+      } catch (qrErr: unknown) {
+        const errorMsg = qrErr instanceof Error ? qrErr.message : 'Falha ao buscar QR Code na Evolution API';
+        return new Response(
+          JSON.stringify({ success: false, error: errorMsg }),
+          { status: 500, headers: jsonHeaders }
+        );
+      }
+    }
+
+    // 3. Ação: Desconectar Instância (Logout)
+    if (action === 'logout') {
+      const logoutUrl = `${apiUrl}/instance/logout/${instanceName}`;
+      try {
+        const evoRes = await fetch(logoutUrl, {
+          method: 'DELETE',
+          headers: {
+            'Content-Type': 'application/json',
+            apikey: apiKey,
+          },
+        });
+
+        const evoData = (await evoRes.json()) as Record<string, any>;
+        return new Response(
+          JSON.stringify({
+            success: evoRes.ok,
+            message: 'Instância desconectada com sucesso.',
+            raw: evoData,
+          }),
+          { headers: jsonHeaders }
+        );
+      } catch (logoutErr: unknown) {
+        const errorMsg = logoutErr instanceof Error ? logoutErr.message : 'Falha ao desconectar da Evolution API';
+        return new Response(
+          JSON.stringify({ success: false, error: errorMsg }),
+          { status: 500, headers: jsonHeaders }
+        );
+      }
+    }
+
+    // 4. Ação: Enviar Mensagem de Texto
     const rawPhone = body.number || context.env.DEFAULT_WHATSAPP_PHONE || '';
     const phone = cleanPhone(rawPhone);
     const text = (body.text || '').trim();
