@@ -70,6 +70,15 @@ export const EventCard: React.FC<EventCardProps> = ({
   const handleSendNotification = async () => {
     setIsSending(true);
     setStatusMessage(null);
+
+    const activeChannel = config.channel || 'evolution';
+    if ((activeChannel === 'evolution' || activeChannel === 'both') && !config.whatsappNumber?.trim()) {
+      setStatusMessage('⚠️ Cadastre o número de WhatsApp nas configurações (topo da tela)!');
+      setIsSending(false);
+      setTimeout(() => setStatusMessage(null), 6000);
+      return;
+    }
+
     try {
       const res = await sendNotification(event, config);
       setStatusMessage(res.message);
@@ -80,7 +89,7 @@ export const EventCard: React.FC<EventCardProps> = ({
       setStatusMessage('Erro ao enviar alerta');
     } finally {
       setIsSending(false);
-      setTimeout(() => setStatusMessage(null), 4000);
+      setTimeout(() => setStatusMessage(null), 5000);
     }
   };
 

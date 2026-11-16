@@ -205,17 +205,27 @@ export const Navbar: React.FC<NavbarProps> = ({
               <button
                 onClick={onOpenSettings}
                 className={`p-2 sm:px-3 sm:py-2 rounded-xl border text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer ${
-                  evolutionConnected
+                  !config.whatsappNumber?.trim()
+                    ? 'border-amber-300 bg-amber-50 text-amber-900 hover:bg-amber-100 animate-pulse'
+                    : evolutionConnected
                     ? 'border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100'
                     : 'border-rose-300 bg-rose-50 text-rose-800 hover:bg-rose-100 animate-pulse'
                 }`}
                 title={
-                  evolutionConnected
+                  !config.whatsappNumber?.trim()
+                    ? 'Atenção: Cadastre o número do WhatsApp da esposa para receber alertas!'
+                    : evolutionConnected
                     ? 'WhatsApp Conectado (Instância AGENDAINTERATIVA online)'
                     : 'WhatsApp Desconectado: Clique para escanear o QR Code!'
                 }
               >
-                {evolutionConnected ? (
+                {!config.whatsappNumber?.trim() ? (
+                  <>
+                    <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0" />
+                    <Smartphone className="w-4 h-4 text-amber-600" />
+                    <span className="hidden sm:inline">Cadastrar Número WhatsApp ⚠️</span>
+                  </>
+                ) : evolutionConnected ? (
                   <>
                     <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0 animate-ping" />
                     <Smartphone className="w-4 h-4 text-emerald-600" />

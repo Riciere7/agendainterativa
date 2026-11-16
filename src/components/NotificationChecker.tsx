@@ -31,6 +31,7 @@ export const NotificationChecker: React.FC<NotificationCheckerProps> = ({
     const checkReminders = async () => {
       const now = new Date();
       const currentTimestamp = now.getTime();
+      const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 
       for (const event of events) {
         if (event.completed || event.reminderSent) continue;
@@ -46,10 +47,12 @@ export const NotificationChecker: React.FC<NotificationCheckerProps> = ({
         const offsetMinutes = parseInt(event.reminderTiming, 10) || 0;
         const reminderTimestamp = eventDate.getTime() - offsetMinutes * 60 * 1000;
 
-        // If current time is within reminder window (between reminderTimestamp and event start + 30 min)
-        if (currentTimestamp >= reminderTimestamp && currentTimestamp <= eventDate.getTime() + 30 * 60 * 1000) {
-          checkedEventsRef.current.add(event.id);
+        // É do dia de hoje e já passou da hora do lembrete (até 4 horas após o início do compromisso)
+        const isPastReminder = currentTimestamp >= reminderTimestamp;
+        const isWithinWindow = currentTimestamp <= eventDate.getTime() + 4 * 60 * 60 * 1000;
+        const isToday = event.date === todayStr;
 
+        if (isPastReminder && (isWithinWindow || isToday)) {
           // 1. Play sound
           if (config.soundEnabled) {
             soundEffects.playChime();
@@ -69,41 +72,64 @@ export const NotificationChecker: React.FC<NotificationCheckerProps> = ({
 
           // 3. Send Notification via Evolution API (WhatsApp) and/or Telegram
           const channel = config.channel || 'evolution';
+          let sentSuccessfully = false;
+
           if (config.autoSendEnabled) {
             try {
-              await sendNotification(event, config);
+              const res = await sendNotification(event, config);
+              sentSuccessfully = res.success;
+              if (!res.success) {
+                console.warn('Alerta automático WhatsApp/Telegram não pôde ser enviado:', res.message);
+              }
             } catch (err) {
               console.error('Falha ao disparar alerta automático:', err);
             }
           }
 
-          // 4. In-App Toast
-          const channelLabel =
-            channel === 'evolution'
-              ? 'WhatsApp (Evolution API)'
-              : channel === 'telegram'
-              ? 'Telegram'
-              : 'WhatsApp & Telegram';
+          // Só marca como enviado e exibe toast de sucesso se o envio foi bem-sucedido
+          // (ou se autoSendEnabled estiver desativado, apenas para alerta local na tela)
+          if (sentSuccessfully || !config.autoSendEnabled) {
+            checkedEventsRef.current.add(event.id);
+            onUpdateEvent({ ...event, reminderSent: true });
 
-          setLastAlert({
-            title: event.title,
-            time: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
-            channel: channelLabel,
-          });
-          setTimeout(() => setLastAlert(null), 8000);
+            const channelLabel =
+              channel === 'evolution'
+                ? 'WhatsApp (Evolution API)'
+                : channel === 'telegram'
+                ? 'Telegram'
+                : 'WhatsApp & Telegram';
 
-          // 5. Mark event as reminderSent
-          onUpdateEvent({ ...event, reminderSent: true });
+            setLastAlert({
+              title: event.title,
+              time: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+              channel: channelLabel,
+            });
+            setTimeout(() => setLastAlert(null), 8000);
+          }
         }
       }
     };
 
-    // Check every 30 seconds
-    const interval = setInterval(checkReminders, 30000);
+    // Check every 25 seconds
+    const interval = setInterval(checkReminders, 25000);
     // Run initial check
     checkReminders();
 
-    return () => clearInterval(interval);
+    // No celular: ao desbloquear a tela ou alternar para a aba, verifica imediatamente
+    const handleVisibility = () => {
+      if (typeof document !== 'undefined' && !document.hidden) {
+        checkReminders();
+      }
+    };
+
+    window.addEventListener('visibilitychange', handleVisibility);
+    window.addEventListener('focus', handleVisibility);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('visibilitychange', handleVisibility);
+      window.removeEventListener('focus', handleVisibility);
+    };
   }, [events, config, onUpdateEvent]);
 
   if (!lastAlert) return null;
