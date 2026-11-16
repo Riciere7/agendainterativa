@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { AgendaEvent, TelegramConfig } from '../types';
-import { getCategoryEmoji, getCategoryLabel, sendTelegramNotification } from '../utils/telegram';
+import { AgendaEvent, NotificationConfig } from '../types';
+import { getCategoryEmoji, getCategoryLabel } from '../utils/telegram';
+import { sendNotification } from '../utils/evolution';
 import { soundEffects } from '../utils/audio';
 import confetti from 'canvas-confetti';
 import {
@@ -13,14 +14,14 @@ import {
   Trash2,
   Edit2,
   ExternalLink,
-  BellRing,
-  AlertCircle,
   Loader2,
+  Smartphone,
+  Bot,
 } from 'lucide-react';
 
 interface EventCardProps {
   event: AgendaEvent;
-  config: TelegramConfig;
+  config: NotificationConfig;
   onToggleComplete: (id: string) => void;
   onEdit: (event: AgendaEvent) => void;
   onDelete: (id: string) => void;
@@ -66,11 +67,11 @@ export const EventCard: React.FC<EventCardProps> = ({
     onToggleComplete(event.id);
   };
 
-  const handleSendTelegram = async () => {
+  const handleSendNotification = async () => {
     setIsSending(true);
     setStatusMessage(null);
     try {
-      const res = await sendTelegramNotification(event, config);
+      const res = await sendNotification(event, config);
       setStatusMessage(res.message);
       if (res.success) {
         onEventUpdated({ ...event, reminderSent: true });
@@ -87,6 +88,9 @@ export const EventCard: React.FC<EventCardProps> = ({
     event.locationOrLink &&
     (event.locationOrLink.startsWith('http://') || event.locationOrLink.startsWith('https://'));
 
+  const channel = config.channel || 'evolution';
+  const isWhatsApp = channel === 'evolution' || channel === 'both';
+
   return (
     <div
       className={`group relative rounded-2xl p-4 transition-all duration-200 border bg-white shadow-sm hover:shadow-md ${
@@ -99,19 +103,20 @@ export const EventCard: React.FC<EventCardProps> = ({
         {/* Completion Checkbox */}
         <button
           onClick={handleComplete}
-          className="mt-0.5 text-gray-300 hover:text-rose-500 transition-colors cursor-pointer shrink-0"
-          title={event.completed ? 'Marcar como pendente' : 'Marcar como concluído'}
+          className="mt-1 text-gray-300 hover:text-emerald-500 transition-colors cursor-pointer shrink-0"
+          title={event.completed ? 'Marcar como não concluído' : 'Marcar como concluído'}
         >
           {event.completed ? (
-            <CheckCircle className="w-5 h-5 text-emerald-500" />
+            <CheckCircle className="w-5 h-5 text-emerald-500 fill-emerald-100" />
           ) : (
-            <Circle className="w-5 h-5 hover:scale-110 transition-transform" />
+            <Circle className="w-5 h-5" />
           )}
         </button>
 
         {/* Content */}
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap mb-1">
+          <div className="flex flex-wrap items-center gap-2 mb-1.5">
+            {/* Category Badge */}
             <span
               className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold border ${colors.bg} ${colors.text} ${colors.border}`}
             >
@@ -119,31 +124,33 @@ export const EventCard: React.FC<EventCardProps> = ({
               <span>{categoryLabel}</span>
             </span>
 
+            {/* Priority Badge */}
             {event.priority === 'alta' && (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold bg-red-50 text-red-600 border border-red-200">
-                <AlertCircle className="w-3 h-3" />
-                Alta Prioridade
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-50 text-red-600 border border-red-200 uppercase tracking-wider">
+                Prioridade Alta
               </span>
             )}
 
-            {event.reminderTiming !== '0' && (
-              <span className="text-[11px] text-gray-400 flex items-center gap-1" title="Lembrete programado">
-                <BellRing className="w-3 h-3 text-rose-400" />
-                {event.reminderTiming === '1440' ? '1 dia antes' : `${event.reminderTiming}min antes`}
+            {event.reminderSent && (
+              <span className="text-[10px] font-semibold text-emerald-600 flex items-center gap-0.5">
+                <CheckCircle className="w-3 h-3" />
+                Alertado
               </span>
             )}
           </div>
 
-          <h3
-            className={`text-base font-semibold text-gray-900 leading-snug break-words ${
+          {/* Title */}
+          <h4
+            className={`text-sm sm:text-base font-bold text-gray-900 leading-snug break-words ${
               event.completed ? 'line-through text-gray-400' : ''
             }`}
           >
             {event.title}
-          </h3>
+          </h4>
 
+          {/* Description */}
           {event.description && (
-            <p className="text-xs sm:text-sm text-gray-600 mt-1 line-clamp-2 leading-relaxed">
+            <p className="text-xs text-gray-600 mt-1 line-clamp-2 leading-relaxed">
               {event.description}
             </p>
           )}
@@ -180,13 +187,25 @@ export const EventCard: React.FC<EventCardProps> = ({
             )}
           </div>
 
-          {/* Telegram Direct Action Bar */}
+          {/* Direct Action Bar */}
           <div className="mt-3 pt-2.5 border-t border-gray-100 flex flex-wrap items-center justify-between gap-2">
             <button
-              onClick={handleSendTelegram}
+              onClick={handleSendNotification}
               disabled={isSending}
-              className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-200 transition-colors cursor-pointer"
-              title="Disparar lembrete com carinho no Telegram dela"
+              className={`inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg border transition-colors cursor-pointer ${
+                channel === 'evolution'
+                  ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-200'
+                  : channel === 'telegram'
+                  ? 'bg-sky-50 hover:bg-sky-100 text-sky-700 border-sky-200'
+                  : 'bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border-indigo-200'
+              }`}
+              title={
+                channel === 'evolution'
+                  ? 'Disparar lembrete no WhatsApp via Evolution API'
+                  : channel === 'telegram'
+                  ? 'Disparar lembrete no Telegram'
+                  : 'Disparar lembrete no WhatsApp e Telegram'
+              }
             >
               {isSending ? (
                 <>
@@ -195,14 +214,30 @@ export const EventCard: React.FC<EventCardProps> = ({
                 </>
               ) : (
                 <>
-                  <Send className="w-3.5 h-3.5" />
-                  <span>Alertar no Telegram</span>
+                  {channel === 'evolution' ? (
+                    <Smartphone className="w-3.5 h-3.5 text-emerald-600" />
+                  ) : channel === 'telegram' ? (
+                    <Bot className="w-3.5 h-3.5 text-sky-600" />
+                  ) : (
+                    <Send className="w-3.5 h-3.5 text-indigo-600" />
+                  )}
+                  <span>
+                    {channel === 'evolution'
+                      ? 'Alertar no WhatsApp'
+                      : channel === 'telegram'
+                      ? 'Alertar no Telegram'
+                      : 'Alertar WhatsApp & TG'}
+                  </span>
                 </>
               )}
             </button>
 
             {statusMessage && (
-              <span className="text-xs text-sky-600 font-medium animate-fade-in">
+              <span
+                className={`text-xs font-medium animate-fade-in ${
+                  isWhatsApp ? 'text-emerald-700' : 'text-sky-700'
+                }`}
+              >
                 {statusMessage}
               </span>
             )}

@@ -1,15 +1,15 @@
 import React, { useState } from 'react';
-import { AgendaEvent, TelegramConfig } from '../types';
+import { AgendaEvent, NotificationConfig } from '../types';
 import { EventCard } from './EventCard';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { Plus, Sparkles, Send, Loader2 } from 'lucide-react';
-import { sendRawTelegramMessage } from '../utils/telegram';
+import { Plus, Send, Loader2, Smartphone, Bot } from 'lucide-react';
+import { formatDailySummaryWhatsAppMessage, sendRawNotification } from '../utils/evolution';
 
 interface DailyTimelineProps {
   date: Date;
   events: AgendaEvent[];
-  config: TelegramConfig;
+  config: NotificationConfig;
   onAddNewEvent: () => void;
   onToggleComplete: (id: string) => void;
   onEditEvent: (event: AgendaEvent) => void;
@@ -40,34 +40,44 @@ export const DailyTimeline: React.FC<DailyTimelineProps> = ({
 
   const completedCount = dayEvents.filter((e) => e.completed).length;
 
-  // Build a summary message for the whole day to send via Telegram
+  const channel = config.channel || 'evolution';
+
+  // Build a summary message for the whole day to send
   const handleSendDailySummary = async () => {
-    if (!config.botToken || !config.chatId) {
+    if (channel === 'evolution' && (!config.evolutionApiUrl || !config.whatsappNumber)) {
+      alert('Configure a Evolution API e o número do WhatsApp nas configurações primeiro!');
+      return;
+    }
+
+    if (channel === 'telegram' && (!config.botToken || !config.chatId)) {
       alert('Configure o Bot Token e o Chat ID nas configurações do Telegram primeiro!');
       return;
     }
+
     if (dayEvents.length === 0) return;
 
     setIsSendingSummary(true);
     setSummaryStatus(null);
 
-    let summary = `🌟 <b>ROTEIRO DO DIA - ${formattedDateTitle.toUpperCase()}</b> 🌟\n\n`;
-    summary += `Oi <b>${config.wifeName || 'meu amor'}</b>! Aqui está a sua programação de hoje:\n\n`;
+    // WhatsApp formatted summary
+    const whatsAppSummary = formatDailySummaryWhatsAppMessage(formattedDateTitle, dayEvents, config);
 
+    // Telegram HTML formatted summary
+    let telegramSummary = `🌟 <b>ROTEIRO DO DIA - ${formattedDateTitle.toUpperCase()}</b> 🌟\n\n`;
+    telegramSummary += `Oi <b>${config.wifeName || 'meu amor'}</b>! Aqui está a sua programação de hoje:\n\n`;
     dayEvents.forEach((ev, i) => {
       const time = ev.time ? `[${ev.time}] ` : '';
       const check = ev.completed ? '✅' : '⏳';
-      summary += `${i + 1}. ${check} ${time}<b>${ev.title}</b>\n`;
-      if (ev.locationOrLink) summary += `   📍 <i>${ev.locationOrLink}</i>\n`;
+      telegramSummary += `${i + 1}. ${check} ${time}<b>${ev.title}</b>\n`;
+      if (ev.locationOrLink) telegramSummary += `   📍 <i>${ev.locationOrLink}</i>\n`;
     });
-
-    summary += `\n💪 <i>Você é capaz de tudo! Qualquer coisa estou por aqui torcendo por você.</i>\n${
+    telegramSummary += `\n💪 <i>Você é capaz de tudo! Qualquer coisa estou por aqui torcendo por você.</i>\n${
       config.husbandName ? `Com amor, <b>${config.husbandName}</b> ❤️` : 'Te amo! ❤️'
     }`;
 
     try {
-      const res = await sendRawTelegramMessage(summary, config);
-      setSummaryStatus(res.success ? 'Roteiro enviado no Telegram!' : res.message);
+      const res = await sendRawNotification(whatsAppSummary, telegramSummary, config);
+      setSummaryStatus(res.success ? 'Roteiro enviado!' : res.message);
     } catch {
       setSummaryStatus('Erro ao enviar roteiro.');
     } finally {
@@ -96,15 +106,38 @@ export const DailyTimeline: React.FC<DailyTimelineProps> = ({
             <button
               onClick={handleSendDailySummary}
               disabled={isSendingSummary}
-              className="px-3 py-2 rounded-xl bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-200 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
-              title="Enviar roteiro completo do dia para o Telegram dela"
+              className={`px-3 py-2 rounded-xl border text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer ${
+                channel === 'evolution'
+                  ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-200'
+                  : channel === 'telegram'
+                  ? 'bg-sky-50 hover:bg-sky-100 text-sky-700 border-sky-200'
+                  : 'bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border-indigo-200'
+              }`}
+              title={
+                channel === 'evolution'
+                  ? 'Enviar roteiro completo do dia para o WhatsApp dela via Evolution API'
+                  : channel === 'telegram'
+                  ? 'Enviar roteiro completo do dia para o Telegram dela'
+                  : 'Enviar roteiro completo para WhatsApp e Telegram'
+              }
             >
               {isSendingSummary ? (
                 <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : channel === 'evolution' ? (
+                <Smartphone className="w-3.5 h-3.5 text-emerald-600" />
+              ) : channel === 'telegram' ? (
+                <Bot className="w-3.5 h-3.5 text-sky-600" />
               ) : (
-                <Send className="w-3.5 h-3.5 text-sky-600" />
+                <Send className="w-3.5 h-3.5 text-indigo-600" />
               )}
-              <span>{summaryStatus || 'Enviar Roteiro Telegram'}</span>
+              <span>
+                {summaryStatus ||
+                  (channel === 'evolution'
+                    ? 'Enviar Roteiro WhatsApp'
+                    : channel === 'telegram'
+                    ? 'Enviar Roteiro Telegram'
+                    : 'Enviar Roteiro Geral')}
+              </span>
             </button>
           )}
 
@@ -118,39 +151,27 @@ export const DailyTimeline: React.FC<DailyTimelineProps> = ({
         </div>
       </div>
 
-      {/* Events List */}
-      {dayEvents.length === 0 ? (
-        <div className="py-12 px-4 text-center">
-          <div className="w-16 h-16 mx-auto mb-4 rounded-3xl bg-rose-50 flex items-center justify-center text-rose-400">
-            <Sparkles className="w-8 h-8 animate-bounce" />
+      {/* Events Timeline / List */}
+      <div className="space-y-3">
+        {dayEvents.length === 0 ? (
+          <div className="py-12 text-center text-gray-400">
+            <p className="text-sm">Nenhum compromisso marcado para este dia.</p>
+            <p className="text-xs mt-1">Aproveite para descansar ou planejar um novo momento especial!</p>
           </div>
-          <h3 className="text-base font-bold text-gray-800 mb-1">Dia livre ou sem compromissos!</h3>
-          <p className="text-xs sm:text-sm text-gray-500 max-w-sm mx-auto mb-5 leading-relaxed">
-            Aproveite para focar nos estudos, tirar um tempo para autocuidado ou planejar um momento a dois. 💕
-          </p>
-          <button
-            onClick={onAddNewEvent}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-rose-500 hover:bg-rose-600 text-white text-xs font-semibold shadow-sm transition-colors cursor-pointer"
-          >
-            <Plus className="w-4 h-4" />
-            Adicionar Primeiro Compromisso
-          </button>
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {dayEvents.map((event) => (
+        ) : (
+          dayEvents.map((evt) => (
             <EventCard
-              key={event.id}
-              event={event}
+              key={evt.id}
+              event={evt}
               config={config}
               onToggleComplete={onToggleComplete}
               onEdit={onEditEvent}
               onDelete={onDeleteEvent}
               onEventUpdated={onEventUpdated}
             />
-          ))}
-        </div>
-      )}
+          ))
+        )}
+      </div>
     </div>
   );
 };

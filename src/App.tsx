@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { AgendaEvent, HabitTracker, LoveNote, StudyExam, ThemeId, TelegramConfig } from './types';
+import { AgendaEvent, HabitTracker, LoveNote, StudyExam, ThemeId, NotificationConfig } from './types';
 import {
   loadEvents,
   saveEvents,
-  loadTelegramConfig,
-  saveTelegramConfig,
+  loadNotificationConfig,
+  saveNotificationConfig,
   loadTheme,
   saveTheme,
   loadLoveNotes,
@@ -24,18 +24,18 @@ import { StudyHub } from './components/StudyHub';
 import { HabitsWellness } from './components/HabitsWellness';
 import { LoveNotesModal } from './components/LoveNotesModal';
 import { EventModal } from './components/EventModal';
-import { TelegramSettingsModal } from './components/TelegramSettingsModal';
+import { NotificationSettingsModal } from './components/NotificationSettingsModal';
 import { CloudflareDeployGuideModal } from './components/CloudflareDeployGuideModal';
 import { NotificationChecker } from './components/NotificationChecker';
-import { Heart, Cloud, Sparkles, Plus, Send, Trash2 } from 'lucide-react';
-import { sendRawTelegramMessage } from './utils/telegram';
+import { Heart, Cloud, Sparkles, Plus, Send, Trash2, Smartphone, Bot } from 'lucide-react';
+import { sendRawNotification, formatLoveNoteWhatsAppMessage } from './utils/evolution';
 
 export function App() {
   const todayStr = getTodayDateString();
 
   // Persistent States
   const [events, setEvents] = useState<AgendaEvent[]>(() => loadEvents());
-  const [config, setConfig] = useState<TelegramConfig>(() => loadTelegramConfig());
+  const [config, setConfig] = useState<NotificationConfig>(() => loadNotificationConfig());
   const [theme, setTheme] = useState<ThemeId>(() => loadTheme());
   const [loveNotes, setLoveNotes] = useState<LoveNote[]>(() => loadLoveNotes());
   const [exams, setExams] = useState<StudyExam[]>(() => loadExams());
@@ -50,7 +50,7 @@ export function App() {
   // Modals
   const [isEventModalOpen, setIsEventModalOpen] = useState(false);
   const [eventToEdit, setEventToEdit] = useState<AgendaEvent | null>(null);
-  const [isTelegramModalOpen, setIsTelegramModalOpen] = useState(false);
+  const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [isDeployGuideModalOpen, setIsDeployGuideModalOpen] = useState(false);
   const [isLoveNotesModalOpen, setIsLoveNotesModalOpen] = useState(false);
   const [toastNoteStatus, setToastNoteStatus] = useState<string | null>(null);
@@ -61,7 +61,7 @@ export function App() {
   }, [events]);
 
   useEffect(() => {
-    saveTelegramConfig(config);
+    saveNotificationConfig(config);
   }, [config]);
 
   useEffect(() => {
@@ -114,6 +114,7 @@ export function App() {
   };
 
   const currentTheme = THEMES[theme];
+  const channel = config.channel || 'evolution';
 
   return (
     <div className={`min-h-screen ${currentTheme.bgGradient} flex flex-col font-sans transition-colors duration-300`}>
@@ -134,21 +135,21 @@ export function App() {
         onThemeChange={setTheme}
         config={config}
         loveNotesCount={loveNotes.length}
-        onOpenSettings={() => setIsTelegramModalOpen(true)}
+        onOpenSettings={() => setIsSettingsModalOpen(true)}
         onOpenDeployGuide={() => setIsDeployGuideModalOpen(true)}
         onOpenNewEvent={handleOpenNewEvent}
       />
 
       {/* Main Container */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
-        {/* Hero Banner (Always visible or customizable) */}
+        {/* Hero Banner */}
         <HeaderHero
           config={config}
           events={events}
           habit={habit}
           theme={theme}
           onOpenLoveNotes={() => setIsLoveNotesModalOpen(true)}
-          onOpenSettings={() => setIsTelegramModalOpen(true)}
+          onOpenSettings={() => setIsSettingsModalOpen(true)}
           onOpenWater={() => setActiveTab('habitos')}
         />
 
@@ -226,7 +227,7 @@ export function App() {
             </div>
 
             {toastNoteStatus && (
-              <div className="mb-4 p-3 rounded-xl bg-sky-50 border border-sky-200 text-sky-800 text-xs font-semibold text-center animate-fade-in">
+              <div className="mb-4 p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold text-center animate-fade-in">
                 {toastNoteStatus}
               </div>
             )}
@@ -248,19 +249,46 @@ export function App() {
                       <div className="flex items-center gap-1">
                         <button
                           onClick={async () => {
-                            if (!config.botToken || !config.chatId) {
+                            if (channel === 'evolution' && (!config.evolutionApiUrl || !config.whatsappNumber)) {
+                              alert('Configure a Evolution API e o número de WhatsApp nas configurações!');
+                              return;
+                            }
+                            if (channel === 'telegram' && (!config.botToken || !config.chatId)) {
                               alert('Configure o Telegram nas configurações!');
                               return;
                             }
-                            const msg = `💌 <b>BILHETINHO DE AMOR</b> 💌\n\n<i>"${note.text}"</i>\n\n— <b>${note.author}</b>`;
-                            const res = await sendRawTelegramMessage(msg, config);
-                            setToastNoteStatus(res.success ? 'Bilhete enviado para o Telegram dela!' : res.message);
+                            const whatsAppMsg = formatLoveNoteWhatsAppMessage(note, config);
+                            const telegramMsg = `💌 <b>BILHETINHO DE AMOR</b> 💌\n\n<i>"${note.text}"</i>\n\n— <b>${note.author}</b>`;
+                            const res = await sendRawNotification(whatsAppMsg, telegramMsg, config);
+                            setToastNoteStatus(
+                              res.success
+                                ? channel === 'evolution'
+                                  ? 'Bilhete enviado para o WhatsApp dela!'
+                                  : channel === 'telegram'
+                                  ? 'Bilhete enviado para o Telegram dela!'
+                                  : 'Bilhete enviado para WhatsApp e Telegram!'
+                                : res.message
+                            );
                             setTimeout(() => setToastNoteStatus(null), 3500);
                           }}
-                          className="p-1 rounded-lg text-sky-600 hover:text-sky-800 cursor-pointer"
-                          title="Enviar este recado no Telegram dela"
+                          className={`p-1 rounded-lg cursor-pointer transition-colors ${
+                            channel === 'evolution'
+                              ? 'text-emerald-600 hover:text-emerald-800'
+                              : 'text-sky-600 hover:text-sky-800'
+                          }`}
+                          title={
+                            channel === 'evolution'
+                              ? 'Enviar este recado no WhatsApp dela via Evolution API'
+                              : 'Enviar este recado no Telegram dela'
+                          }
                         >
-                          <Send className="w-3.5 h-3.5" />
+                          {channel === 'evolution' ? (
+                            <Smartphone className="w-3.5 h-3.5" />
+                          ) : channel === 'telegram' ? (
+                            <Bot className="w-3.5 h-3.5" />
+                          ) : (
+                            <Send className="w-3.5 h-3.5" />
+                          )}
                         </button>
                         <button
                           onClick={() => {
@@ -311,11 +339,27 @@ export function App() {
             <span>•</span>
 
             <button
-              onClick={() => setIsTelegramModalOpen(true)}
-              className="hover:text-sky-600 flex items-center gap-1 cursor-pointer transition-colors"
+              onClick={() => setIsSettingsModalOpen(true)}
+              className={`hover:text-emerald-600 flex items-center gap-1 cursor-pointer transition-colors ${
+                channel === 'evolution' ? 'text-emerald-600' : 'text-sky-600'
+              }`}
             >
-              <Sparkles className="w-3.5 h-3.5 text-sky-500" />
-              <span>Telegram Bot Ativo</span>
+              {channel === 'evolution' ? (
+                <>
+                  <Smartphone className="w-3.5 h-3.5 text-emerald-500" />
+                  <span>Evolution API (WhatsApp) Ativa</span>
+                </>
+              ) : channel === 'telegram' ? (
+                <>
+                  <Bot className="w-3.5 h-3.5 text-sky-500" />
+                  <span>Telegram Bot Ativo</span>
+                </>
+              ) : (
+                <>
+                  <Sparkles className="w-3.5 h-3.5 text-indigo-500" />
+                  <span>WhatsApp & Telegram Ativos</span>
+                </>
+              )}
             </button>
           </div>
         </div>
@@ -334,9 +378,9 @@ export function App() {
         config={config}
       />
 
-      <TelegramSettingsModal
-        isOpen={isTelegramModalOpen}
-        onClose={() => setIsTelegramModalOpen(false)}
+      <NotificationSettingsModal
+        isOpen={isSettingsModalOpen}
+        onClose={() => setIsSettingsModalOpen(false)}
         config={config}
         onSaveConfig={setConfig}
       />

@@ -1,11 +1,21 @@
 import React, { useState } from 'react';
-import { TelegramConfig, AgendaEvent, HabitTracker, ThemeId } from '../types';
+import { NotificationConfig, AgendaEvent, HabitTracker, ThemeId } from '../types';
 import { getDailyQuote } from '../utils/quotes';
 import { THEMES } from '../utils/theme';
-import { Heart, Sparkles, Calendar, CheckCircle2, Droplet, MessageCircleHeart, Send } from 'lucide-react';
+import {
+  Heart,
+  Sparkles,
+  Calendar,
+  CheckCircle2,
+  Droplet,
+  MessageCircleHeart,
+  Smartphone,
+  Bot,
+  Send,
+} from 'lucide-react';
 
 interface HeaderHeroProps {
-  config: TelegramConfig;
+  config: NotificationConfig;
   events: AgendaEvent[];
   habit: HabitTracker;
   theme: ThemeId;
@@ -36,7 +46,15 @@ export const HeaderHero: React.FC<HeaderHeroProps> = ({
   const todayEvents = events.filter((e) => e.date === todayStr);
   const completedToday = todayEvents.filter((e) => e.completed).length;
 
-  const isConfigured = Boolean(config.botToken && config.chatId);
+  const channel = config.channel || 'evolution';
+  const isEvolutionConfigured = Boolean(config.evolutionApiUrl && config.whatsappNumber);
+  const isTelegramConfigured = Boolean(config.botToken && config.chatId);
+  const isConfigured =
+    channel === 'evolution'
+      ? isEvolutionConfigured
+      : channel === 'telegram'
+      ? isTelegramConfigured
+      : isEvolutionConfigured || isTelegramConfigured;
 
   return (
     <div className="w-full mb-8">
@@ -61,7 +79,9 @@ export const HeaderHero: React.FC<HeaderHeroProps> = ({
             </h1>
 
             <p className="text-white/90 text-sm sm:text-base leading-relaxed max-w-xl mb-5">
-              Seu cantinho especial para organizar estudos, trabalho e momentos que importam. Lembretes automáticos e ilimitados direto no seu Telegram para você brilhar sem estresse!
+              Seu cantinho especial para organizar estudos, trabalho e momentos que importam. Lembretes automáticos direto no seu{' '}
+              {channel === 'evolution' ? 'WhatsApp (via Evolution API)' : channel === 'telegram' ? 'Telegram' : 'WhatsApp e Telegram'}{' '}
+              para você brilhar sem estresse!
             </p>
 
             {/* Quick Metrics Badges */}
@@ -98,54 +118,67 @@ export const HeaderHero: React.FC<HeaderHeroProps> = ({
             <div className="bg-white/95 text-gray-800 rounded-2xl p-5 shadow-lg border border-white/40">
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-rose-500">
-                  <Heart className="w-4 h-4 fill-rose-500 text-rose-500 animate-pulse" />
-                  <span>Frase do Dia com Amor</span>
+                  <Heart className="w-4 h-4 fill-rose-500" />
+                  <span>Dose Diária de Amor</span>
                 </div>
                 <button
                   onClick={() => setQuoteOffset((prev) => prev + 1)}
-                  className="text-xs text-gray-500 hover:text-rose-600 transition-colors cursor-pointer"
-                  title="Ver outra mensagem inspiradora"
+                  className="text-xs text-gray-400 hover:text-rose-500 transition-colors cursor-pointer"
+                  title="Ver outra frase"
                 >
-                  Outra frase ✨
+                  Trocar frase ↻
                 </button>
               </div>
 
-              <blockquote className="text-sm font-medium italic text-gray-700 leading-relaxed mb-3">
+              <p className="text-sm sm:text-base font-medium italic text-gray-700 leading-relaxed mb-3">
                 "{dailyQuote.quote}"
-              </blockquote>
+              </p>
 
-              <div className="pt-2 border-t border-gray-100 flex items-center justify-between">
-                <span className="text-xs text-rose-600 font-semibold flex items-center gap-1">
-                  {dailyQuote.authorNote}
-                </span>
+              <div className="flex items-center justify-between text-xs text-gray-500 pt-2 border-t border-gray-100">
+                <span className="font-semibold">{dailyQuote.authorNote}</span>
+
                 <button
                   onClick={onOpenLoveNotes}
-                  className="text-xs font-semibold text-rose-500 hover:text-rose-700 inline-flex items-center gap-1 bg-rose-50 px-2 py-1 rounded-lg cursor-pointer transition-colors"
+                  className="text-rose-600 hover:text-rose-700 font-bold flex items-center gap-1 cursor-pointer transition-colors"
                 >
                   <MessageCircleHeart className="w-3.5 h-3.5" />
-                  Recadinhos
+                  <span>Mural de Recados</span>
                 </button>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Telegram Alert Status Pill */}
+        {/* Alert Status Pill */}
         <div className="mt-5 pt-4 border-t border-white/20 flex flex-wrap items-center justify-between gap-3 text-xs text-white/90">
           <div className="flex items-center gap-2">
             <span
               className={`w-2.5 h-2.5 rounded-full ${
-                isConfigured ? 'bg-sky-300 animate-ping' : 'bg-amber-300'
+                isConfigured ? 'bg-emerald-300 animate-ping' : 'bg-amber-300'
               }`}
             />
             <span className="flex items-center gap-1.5">
-              <Send className="w-3.5 h-3.5 text-sky-200" />
-              {isConfigured ? (
-                <>
-                  Telegram Bot conectado (Chat ID: <strong>{config.chatId}</strong>) • Lembretes automáticos e gratuitos
-                </>
+              {channel === 'evolution' ? (
+                <Smartphone className="w-3.5 h-3.5 text-emerald-200" />
+              ) : channel === 'telegram' ? (
+                <Bot className="w-3.5 h-3.5 text-sky-200" />
               ) : (
-                <>Telegram Bot ainda não configurado. Ative em 30 segundos!</>
+                <Send className="w-3.5 h-3.5 text-indigo-200" />
+              )}
+              {isConfigured ? (
+                channel === 'evolution' ? (
+                  <>
+                    WhatsApp Evolution API ativo (Instância: <strong>{config.evolutionInstanceName || 'agenda'}</strong>) • Alertas automáticos
+                  </>
+                ) : channel === 'telegram' ? (
+                  <>
+                    Telegram Bot ativo (Chat ID: <strong>{config.chatId}</strong>) • Alertas automáticos
+                  </>
+                ) : (
+                  <>WhatsApp Evolution & Telegram ativos • Alertas automáticos</>
+                )
+              ) : (
+                <>Alertas ainda não configurados. Conecte sua Evolution API em 1 minuto!</>
               )}
             </span>
           </div>
@@ -154,7 +187,7 @@ export const HeaderHero: React.FC<HeaderHeroProps> = ({
             onClick={onOpenSettings}
             className="underline hover:text-white cursor-pointer transition-colors"
           >
-            {isConfigured ? 'Alterar configurações do Telegram' : 'Configurar Telegram agora →'}
+            {isConfigured ? 'Gerenciar configurações de alertas' : 'Configurar Evolution API agora →'}
           </button>
         </div>
       </div>

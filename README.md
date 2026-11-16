@@ -1,14 +1,17 @@
-# 🌸 Agenda Interativa & Carinhosa com Alertas no Telegram 💕
-> Uma aplicação moderna, elegante e acolhedora, feita especialmente para organizar **estudos, trabalhos e rotina pessoal**, com **notificações automáticas e ilimitadas no Telegram**, contagem regressiva para provas, pomodoro de foco, rastreador de hidratação e mural de bilhetinhos de amor. Hospedagem 100% pronta para **Cloudflare Pages**.
+# 🌸 Agenda Interativa & Carinhosa com Alertas no WhatsApp (Evolution API) 💕
+> Uma aplicação moderna, elegante e acolhedora, feita especialmente para organizar **estudos, trabalhos e rotina pessoal**, com **notificações automáticas no WhatsApp via Evolution API** (e suporte a Telegram), contagem regressiva para provas, pomodoro de foco, rastreador de hidratação e mural de bilhetinhos de amor. Hospedagem 100% pronta para **Cloudflare Pages**.
 
 ---
 
 ## ✨ Destaques & Recursos Criados para Ela
 
-1. **🔔 Sistema Inteligente de Alertas no Telegram (100% Grátis & Ilimitado)**:
-   - Notificações enviadas pelo **Bot Oficial do Telegram** diretamente para o chat dela (ou para um grupo do casal!) com mensagens formatadas com carinho em HTML, contendo título, categoria, data, horário, links clicáveis (Google Meet, Zoom, etc.) e um recado motivacional de você!
-   - **Sem limitações ou bloqueios**: ao contrário de bots de WhatsApp não oficiais que expiram ou limitam mensagens, o **Telegram Bot API é oficial, 100% gratuito e vitalício**.
-   - Botão **"Alertar no Telegram"** individual em cada compromisso e botão **"Enviar Roteiro Telegram"** completo com 1 clique.
+1. **🔔 Sistema Inteligente de Alertas no WhatsApp via Evolution API**:
+   - Notificações automáticas disparadas diretamente para o **WhatsApp da sua esposa** através da sua própria instância da **Evolution API** (v1 ou v2).
+   - Mensagens formatadas com carinho em Markdown do WhatsApp (`*negrito*`, `_itálico_`, emojis), contendo título do compromisso, categoria, data, horário, links clicáveis (Google Meet, Zoom, etc.) e um recado motivacional de você!
+   - Botão **"Alertar no WhatsApp"** em cada compromisso para disparo individual com 1 clique.
+   - Botão **"Enviar Roteiro WhatsApp"** com a programação completa do dia.
+   - Verificação em tempo real da conexão da instância diretamente no app.
+   - Também suporta **Telegram Bot** como canal alternativo ou redundante (*Ambos*).
    - Verificação em segundo plano no navegador com aviso sonoro suave (*chime*) e chuva de confetes 🎉 ao concluir tarefas.
 
 2. **📅 Calendário Visual & Linha do Tempo Diária**:
@@ -25,7 +28,7 @@
 
 5. **💌 Mural de Bilhetinhos com Amor**:
    - Um quadro de post-its coloridos onde você pode deixar mensagens de incentivo, recados românticos e votos de boa sorte para as provas e entregas de trabalho.
-   - Você ou ela podem disparar o bilhete direto para o Telegram com 1 clique!
+   - Disparo do bilhetinho direto para o WhatsApp dela com 1 clique!
 
 6. **🎨 5 Temas Visuais Encantadores**:
    - 🌸 **Sakura & Rosa Chic**
@@ -39,41 +42,42 @@
 
 ---
 
-## 📲 Como Configurar o Telegram Bot (Passo a Passo Rápido)
+## 📲 Como Configurar a Evolution API (WhatsApp)
 
-Leva apenas **1 minuto** e não requer conhecimentos técnicos:
+Leva apenas **1 minuto**:
 
-### Passo 1: Criar o seu Bot no Telegram
-1. No Telegram, abra a conversa com o bot oficial [@BotFather](https://t.me/BotFather).
-2. Envie a mensagem: `/newbot`
-3. Ele pedirá um nome para o bot (ex: *Agenda do Meu Amor*).
-4. Em seguida, pedirá um username que termine com `bot` (ex: *AgendaDaMinhaEsposa_bot*).
-5. O BotFather enviará o **HTTP API Token** (algo como `7123456789:AAHqKlxabcdef12345...`). Copie esse token!
+### Passo 1: Obter os dados da sua Evolution API
+1. Tenha uma instância ativa na sua **Evolution API** (ex: nome `agenda` ou `esposa`).
+2. Conecte o WhatsApp escaneando o QR Code na sua Evolution API.
+3. Obtenha:
+   - **URL da API**: Ex: `https://api.meuservidor.com` (ou `http://localhost:8080`)
+   - **API Key**: A chave definida na variável `AUTHENTICATION_API_KEY` da sua Evolution API
+   - **Nome da Instância**: Ex: `agenda`
+   - **WhatsApp da Esposa**: Número com DDD (o DDI 55 do Brasil é inserido automaticamente se você digitar apenas DDD + número, ex: `(11) 98765-4321` ou `5511987654321`).
 
-### Passo 2: Pegar o Chat ID
-1. Abra uma conversa com o bot que você acabou de criar e clique no botão **Iniciar / Start** (ou envie um "Oi").
-2. Abra a conversa com o bot [@userinfobot](https://t.me/userinfobot) ou [@getmyid_bot](https://t.me/getmyid_bot). Ele responderá na mesma hora com o seu número de **Id** (ex: `987654321`).
-3. *(Dica do Casal)*: Se quiserem receber juntos, você pode criar um grupo no Telegram com você e sua esposa, adicionar o bot no grupo e usar o Chat ID do grupo!
-
-### Passo 3: Colocar no App
-1. Na sua Agenda, clique no botão **Telegram** no menu superior.
-2. Cole o **Bot Token** e o **Chat ID**.
-3. Clique em **"Testar Alerta no Telegram Dela Agora"** e pronto!
+### Passo 2: Configurar no Aplicativo
+1. Na sua Agenda, clique no botão **WhatsApp** no menu superior.
+2. Certifique-se de que o canal **WhatsApp (Evolution API)** está selecionado.
+3. Preencha a URL, API Key, Instância e o WhatsApp da sua esposa.
+4. Clique em **"Verificar Conexão da Instância"** para confirmar que a instância está online e conectada.
+5. Clique em **"Testar Envio no WhatsApp"** para disparar uma mensagem de teste para ela!
+6. Clique em **Salvar Configurações**.
 
 ---
 
 ## 🚀 Como Publicar no Cloudflare Pages
 
-O projeto já está 100% estruturado com:
+O projeto já inclui:
 - `dist/` (build estático ultra rápido)
 - `_redirects` e `_headers` (para roteamento SPA e segurança)
-- `functions/api/send-telegram.ts` (API serverless Edge nativa do Cloudflare Pages)
+- `functions/api/send-evolution.ts` (Edge serverless proxy que evita qualquer bloqueio de CORS ao comunicar com a Evolution API)
+- `functions/api/send-telegram.ts` (Edge serverless proxy para Telegram)
 
 ### Método 1: Conectar pelo GitHub (Recomendado)
 1. Suba o código para o seu repositório:
    ```bash
    git add .
-   git commit -m "feat: Migração para Telegram Bot ilimitado e gratuito"
+   git commit -m "feat: Integracao com Evolution API para alertas no WhatsApp"
    git push origin main
    ```
 2. Acesse o painel da [Cloudflare Dashboard](https://dash.cloudflare.com).
@@ -82,7 +86,12 @@ O projeto já está 100% estruturado com:
    - **Framework preset**: `Vite`
    - **Build command**: `npm run build`
    - **Build output directory**: `dist`
-5. Clique em **Save and Deploy**. Em menos de 1 minuto, seu link estará online: `https://agenda-esposa.pages.dev` (com HTTPS gratuito e certificado SSL automático).
+5. *(Opcional)* Em **Settings** > **Environment variables**, você pode definir valores padrão:
+   - `EVOLUTION_API_URL`: URL padrão da Evolution API
+   - `EVOLUTION_API_KEY`: Chave de API padrão
+   - `EVOLUTION_INSTANCE_NAME`: Instância padrão
+   - `DEFAULT_WHATSAPP_PHONE`: Telefone padrão
+6. Clique em **Save and Deploy**. Em menos de 1 minuto, seu link estará online: `https://agenda-esposa.pages.dev` (com HTTPS gratuito e certificado SSL automático).
 
 ### Método 2: Deploy Direto via Terminal (Wrangler CLI)
 ```bash

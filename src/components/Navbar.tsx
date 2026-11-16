@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ThemeId, TelegramConfig } from '../types';
+import { ThemeId, NotificationConfig } from '../types';
 import { THEMES } from '../utils/theme';
 import {
   Calendar,
@@ -10,6 +10,8 @@ import {
   Plus,
   Sparkles,
   Send,
+  Smartphone,
+  Bot,
 } from 'lucide-react';
 
 interface NavbarProps {
@@ -17,7 +19,7 @@ interface NavbarProps {
   onTabChange: (tab: 'agenda' | 'estudos' | 'habitos' | 'amor') => void;
   currentTheme: ThemeId;
   onThemeChange: (theme: ThemeId) => void;
-  config: TelegramConfig;
+  config: NotificationConfig;
   loveNotesCount: number;
   onOpenSettings: () => void;
   onOpenDeployGuide: () => void;
@@ -30,7 +32,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   currentTheme,
   onThemeChange,
   config,
-  loveNotesCount,
+  loveNotesCount: _loveNotesCount,
   onOpenSettings,
   onOpenDeployGuide,
   onOpenNewEvent,
@@ -46,7 +48,13 @@ export const Navbar: React.FC<NavbarProps> = ({
     { id: 'velvet', label: 'Noite Aveludada (Escuro)', icon: '🌙' },
   ];
 
-  const isTelegramConfigured = Boolean(config.botToken && config.chatId);
+  const channel = config.channel || 'evolution';
+  const isConfigured =
+    channel === 'evolution'
+      ? Boolean(config.evolutionApiUrl && config.whatsappNumber)
+      : channel === 'telegram'
+      ? Boolean(config.botToken && config.chatId)
+      : Boolean((config.evolutionApiUrl && config.whatsappNumber) || (config.botToken && config.chatId));
 
   return (
     <header className="sticky top-0 z-40 bg-white/80 backdrop-blur-xl border-b border-gray-100 shadow-xs">
@@ -65,7 +73,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <Heart className="w-4 h-4 fill-rose-500 text-rose-500" />
               </div>
               <p className="text-[11px] text-gray-500 hidden sm:block">
-                Alertas ilimitados no Telegram & Foco diário
+                Alertas no WhatsApp (Evolution API) & Foco diário
               </p>
             </div>
           </div>
@@ -105,7 +113,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               }`}
             >
               <Droplet className="w-4 h-4 text-cyan-500" />
-              <span>Bem-Estar</span>
+              <span>Hábitos & Saúde</span>
             </button>
 
             <button
@@ -116,33 +124,31 @@ export const Navbar: React.FC<NavbarProps> = ({
                   : 'text-gray-500 hover:text-gray-800'
               }`}
             >
-              <Heart className="w-4 h-4 text-rose-500 fill-rose-500" />
+              <Heart className="w-4 h-4 text-rose-500" />
               <span>Mural do Amor</span>
-              {loveNotesCount > 0 && (
-                <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-rose-100 text-rose-700 font-bold">
-                  {loveNotesCount}
-                </span>
-              )}
             </button>
           </nav>
 
-          {/* Action Tools */}
+          {/* Action CTAs */}
           <div className="flex items-center gap-2">
             {/* Theme Selector */}
             <div className="relative">
               <button
                 onClick={() => setThemeMenuOpen(!themeMenuOpen)}
-                className="p-2 sm:px-3 sm:py-2 rounded-xl border border-gray-200 hover:bg-gray-50 text-gray-700 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
-                title="Trocar tema"
+                className="p-2 sm:px-3 sm:py-2 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 text-xs font-semibold text-gray-700 flex items-center gap-1.5 transition-colors cursor-pointer"
+                title="Trocar Tema da Agenda"
               >
                 <span>{themeObj.icon}</span>
-                <span className="hidden sm:inline">Tema</span>
+                <span className="hidden lg:inline">{themeObj.name}</span>
               </button>
 
               {themeMenuOpen && (
                 <>
                   <div className="fixed inset-0 z-10" onClick={() => setThemeMenuOpen(false)} />
-                  <div className="absolute right-0 top-full mt-1.5 w-48 bg-white rounded-2xl shadow-xl border border-gray-100 p-1.5 z-20 space-y-1 text-xs">
+                  <div className="absolute right-0 mt-2 w-56 bg-white rounded-2xl shadow-xl border border-gray-100 p-2 z-20 space-y-1 text-xs">
+                    <div className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-gray-400">
+                      Escolha o visual:
+                    </div>
                     {themeList.map((t) => (
                       <button
                         key={t.id}
@@ -175,18 +181,34 @@ export const Navbar: React.FC<NavbarProps> = ({
               <span className="hidden lg:inline">Cloudflare Pages</span>
             </button>
 
-            {/* Telegram Settings button */}
+            {/* Notification Settings button */}
             <button
               onClick={onOpenSettings}
               className={`p-2 sm:px-3 sm:py-2 rounded-xl border text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer ${
-                isTelegramConfigured
-                  ? 'border-sky-200 bg-sky-50 text-sky-700 hover:bg-sky-100'
+                isConfigured
+                  ? channel === 'evolution'
+                    ? 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+                    : channel === 'telegram'
+                    ? 'border-sky-200 bg-sky-50 text-sky-700 hover:bg-sky-100'
+                    : 'border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100'
                   : 'border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100 animate-pulse'
               }`}
-              title="Configurações do Telegram Bot"
+              title="Configurações de Alertas (Evolution API / Telegram)"
             >
-              <Send className="w-4 h-4 text-sky-600" />
-              <span className="hidden sm:inline">Telegram</span>
+              {channel === 'evolution' ? (
+                <Smartphone className="w-4 h-4 text-emerald-600" />
+              ) : channel === 'telegram' ? (
+                <Bot className="w-4 h-4 text-sky-600" />
+              ) : (
+                <Send className="w-4 h-4 text-indigo-600" />
+              )}
+              <span className="hidden sm:inline">
+                {channel === 'evolution'
+                  ? 'WhatsApp'
+                  : channel === 'telegram'
+                  ? 'Telegram'
+                  : 'WhatsApp & TG'}
+              </span>
             </button>
 
             {/* Add Event Primary CTA */}

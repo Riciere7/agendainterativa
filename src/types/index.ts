@@ -29,16 +29,31 @@ export interface LoveNote {
   pinned?: boolean;
 }
 
-export interface TelegramConfig {
+export type NotificationChannel = 'evolution' | 'telegram' | 'both';
+
+export interface NotificationConfig {
+  channel: NotificationChannel;
   wifeName: string;
   husbandName: string;
-  botToken: string; // e.g. 123456789:ABCdef...
-  chatId: string; // e.g. 987654321
-  topicId?: string; // optional supergroup topic
+
+  // Evolution API (WhatsApp)
+  evolutionApiUrl: string; // Ex: https://api.meudominio.com.br ou http://localhost:8080
+  evolutionApiKey: string; // Chave de API / apikey
+  evolutionInstanceName: string; // Nome da instância, ex: agenda
+  whatsappNumber: string; // WhatsApp de destino (com DDD), ex: (11) 99999-9999 ou 5511999999999
+
+  // Telegram (Canal alternativo / redundante)
+  botToken: string; // Ex: 123456789:ABCdef...
+  chatId: string; // Ex: 987654321
+  topicId?: string; // opcional
+
   autoSendEnabled: boolean;
   soundEnabled: boolean;
   sweetMessageSuffix: boolean;
 }
+
+// Retrocompatibilidade
+export type TelegramConfig = NotificationConfig;
 
 export type ThemeId = 'sakura' | 'lavanda' | 'cappuccino' | 'mint' | 'velvet';
 

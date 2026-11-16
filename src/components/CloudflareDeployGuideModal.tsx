@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Cloud, Terminal, CheckCircle2, Copy, Check, Globe, Smartphone, Sparkles, ShieldCheck } from 'lucide-react';
+import { X, Cloud, CheckCircle2, Copy, Check, Smartphone, Sparkles, Server } from 'lucide-react';
 
 interface CloudflareDeployGuideModalProps {
   isOpen: boolean;
@@ -32,7 +32,7 @@ export const CloudflareDeployGuideModal: React.FC<CloudflareDeployGuideModalProp
             <div>
               <h3 className="text-lg font-bold text-gray-900">Guia de Hospedagem no Cloudflare Pages 🚀</h3>
               <p className="text-xs text-gray-500">
-                100% Gratuito, ultra-rápido, com HTTPS e API serverless automática
+                100% Gratuito, ultra-rápido, com HTTPS e API serverless para Evolution API & Telegram
               </p>
             </div>
           </div>
@@ -49,10 +49,10 @@ export const CloudflareDeployGuideModal: React.FC<CloudflareDeployGuideModalProp
           <div className="p-4 rounded-2xl bg-gradient-to-r from-orange-50 to-amber-50 border border-orange-200">
             <div className="flex items-center gap-2 text-xs font-bold text-orange-800 uppercase tracking-wider mb-1">
               <Sparkles className="w-4 h-4 text-orange-600" />
-              <span>Pronto para o Cloudflare Pages!</span>
+              <span>Pronto para o Cloudflare Pages com Evolution API!</span>
             </div>
             <p className="text-xs sm:text-sm text-gray-700 leading-relaxed">
-              O projeto já inclui todas as configurações do Cloudflare Pages: SPA redirects (<code className="font-mono bg-white px-1 py-0.5 rounded text-orange-700">_redirects</code>), cabeçalhos de segurança (<code className="font-mono bg-white px-1 py-0.5 rounded text-orange-700">_headers</code>) e a função serverless do Telegram em <code className="font-mono bg-white px-1 py-0.5 rounded text-orange-700">functions/api/send-telegram.ts</code>.
+              O projeto inclui todas as configurações do Cloudflare Pages: SPA redirects (<code className="font-mono bg-white px-1 py-0.5 rounded text-orange-700">_redirects</code>), cabeçalhos de segurança (<code className="font-mono bg-white px-1 py-0.5 rounded text-orange-700">_headers</code>) e funções serverless Edge em <code className="font-mono bg-white px-1 py-0.5 rounded text-orange-700">functions/api/send-evolution.ts</code> e <code className="font-mono bg-white px-1 py-0.5 rounded text-orange-700">functions/api/send-telegram.ts</code>.
             </p>
           </div>
 
@@ -63,7 +63,7 @@ export const CloudflareDeployGuideModal: React.FC<CloudflareDeployGuideModalProp
                 1
               </span>
               <h4 className="font-bold text-gray-900 text-sm">
-                Opção 1 (Recomendada): Conectar ao GitHub / GitLab
+                Opção 1 (Recomendada): Conectar ao GitHub
               </h4>
             </div>
 
@@ -87,6 +87,23 @@ export const CloudflareDeployGuideModal: React.FC<CloudflareDeployGuideModalProp
                 <div><strong>Build output directory:</strong> dist</div>
               </div>
 
+              {/* Environment Variables on Cloudflare */}
+              <div className="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-900 space-y-1.5">
+                <div className="font-bold flex items-center gap-1.5">
+                  <Server className="w-4 h-4 text-emerald-600" />
+                  <span>Variáveis de Ambiente Opcionais (Cloudflare Pages):</span>
+                </div>
+                <p className="text-emerald-800 leading-relaxed">
+                  Se desejar fixar os dados da Evolution API diretamente no Cloudflare (em Settings &gt; Environment Variables):
+                </p>
+                <ul className="list-disc list-inside font-mono text-[11px] text-emerald-950 space-y-0.5">
+                  <li>EVOLUTION_API_URL: https://api.meuservidor.com</li>
+                  <li>EVOLUTION_API_KEY: sua_chave_api</li>
+                  <li>EVOLUTION_INSTANCE_NAME: agenda</li>
+                  <li>DEFAULT_WHATSAPP_PHONE: 5511999999999</li>
+                </ul>
+              </div>
+
               <p className="text-emerald-700 font-semibold flex items-center gap-1.5 pt-1">
                 <CheckCircle2 className="w-4 h-4 text-emerald-600" />
                 Pronto! Em 40 segundos seu link público <code className="bg-emerald-50 px-1 py-0.5 rounded">https://agenda-esposa.pages.dev</code> estará no ar com HTTPS gratuito!
@@ -106,7 +123,7 @@ export const CloudflareDeployGuideModal: React.FC<CloudflareDeployGuideModalProp
             </div>
 
             <div className="ml-8 space-y-2 text-xs sm:text-sm text-gray-600 leading-relaxed">
-              <p>Você pode fazer o deploy diretamente do seu computador rodando:</p>
+              <p>Você pode fazer o deploy diretamente do seu terminal:</p>
 
               <div className="bg-gray-900 text-gray-100 p-3.5 rounded-2xl font-mono text-xs flex items-center justify-between">
                 <code>npm run build; npx wrangler pages deploy dist --project-name agenda-esposa</code>

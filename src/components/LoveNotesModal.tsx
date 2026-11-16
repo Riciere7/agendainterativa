@@ -1,14 +1,14 @@
 import React, { useState } from 'react';
-import { LoveNote, TelegramConfig } from '../types';
-import { X, Heart, Plus, Pin, Trash2, Send, Sparkles } from 'lucide-react';
+import { LoveNote, NotificationConfig } from '../types';
+import { X, Heart, Plus, Pin, Trash2, Send, Sparkles, Smartphone, Bot } from 'lucide-react';
 import { soundEffects } from '../utils/audio';
-import { sendRawTelegramMessage } from '../utils/telegram';
+import { sendRawNotification, formatLoveNoteWhatsAppMessage } from '../utils/evolution';
 
 interface LoveNotesModalProps {
   isOpen: boolean;
   onClose: () => void;
   notes: LoveNote[];
-  config: TelegramConfig;
+  config: NotificationConfig;
   onSaveNotes: (notes: LoveNote[]) => void;
 }
 
@@ -62,14 +62,24 @@ export const LoveNotesModal: React.FC<LoveNotesModalProps> = ({
     onSaveNotes(updated);
   };
 
-  const sendNoteToTelegram = async (note: LoveNote) => {
-    if (!config.botToken || !config.chatId) {
+  const channel = config.channel || 'evolution';
+
+  const sendNote = async (note: LoveNote) => {
+    if (channel === 'evolution' && (!config.evolutionApiUrl || !config.whatsappNumber)) {
+      alert('Configure a Evolution API e o WhatsApp nas configurações primeiro!');
+      return;
+    }
+
+    if (channel === 'telegram' && (!config.botToken || !config.chatId)) {
       alert('Configure o Telegram nas configurações primeiro!');
       return;
     }
-    const message = `💌 <b>BILHETINHO DE AMOR PRA VOCÊ</b> 💌\n\n<i>"${note.text}"</i>\n\n— <b>${note.author}</b>`;
-    const res = await sendRawTelegramMessage(message, config);
-    setSendStatus(res.success ? 'Bilhetinho enviado no Telegram!' : res.message);
+
+    const whatsAppMessage = formatLoveNoteWhatsAppMessage(note, config);
+    const telegramMessage = `💌 <b>BILHETINHO DE AMOR PRA VOCÊ</b> 💌\n\n<i>"${note.text}"</i>\n\n— <b>${note.author}</b>`;
+
+    const res = await sendRawNotification(whatsAppMessage, telegramMessage, config);
+    setSendStatus(res.success ? 'Bilhetinho enviado com sucesso!' : res.message);
     setTimeout(() => setSendStatus(null), 3500);
   };
 
@@ -99,7 +109,7 @@ export const LoveNotesModal: React.FC<LoveNotesModalProps> = ({
 
         <div className="p-6 space-y-6">
           {sendStatus && (
-            <div className="p-3 rounded-xl bg-sky-50 border border-sky-200 text-sky-800 text-xs font-semibold text-center animate-fade-in">
+            <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold text-center animate-fade-in">
               {sendStatus}
             </div>
           )}
@@ -185,11 +195,23 @@ export const LoveNotesModal: React.FC<LoveNotesModalProps> = ({
                         <Pin className="w-3.5 h-3.5" />
                       </button>
                       <button
-                        onClick={() => sendNoteToTelegram(note)}
-                        className="p-1 rounded-lg text-sky-600 hover:text-sky-800 cursor-pointer"
-                        title="Enviar este recado para o Telegram dela"
+                        onClick={() => sendNote(note)}
+                        className="p-1 rounded-lg text-emerald-600 hover:text-emerald-800 cursor-pointer"
+                        title={
+                          channel === 'evolution'
+                            ? 'Enviar este recado para o WhatsApp dela via Evolution API'
+                            : channel === 'telegram'
+                            ? 'Enviar este recado para o Telegram dela'
+                            : 'Enviar este recado para o WhatsApp e Telegram dela'
+                        }
                       >
-                        <Send className="w-3.5 h-3.5" />
+                        {channel === 'evolution' ? (
+                          <Smartphone className="w-3.5 h-3.5" />
+                        ) : channel === 'telegram' ? (
+                          <Bot className="w-3.5 h-3.5" />
+                        ) : (
+                          <Send className="w-3.5 h-3.5" />
+                        )}
                       </button>
                       <button
                         onClick={() => deleteNote(note.id)}

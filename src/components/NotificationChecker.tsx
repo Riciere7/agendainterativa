@@ -1,12 +1,12 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { AgendaEvent, TelegramConfig } from '../types';
-import { sendTelegramNotification } from '../utils/telegram';
+import { AgendaEvent, NotificationConfig } from '../types';
+import { sendNotification } from '../utils/evolution';
 import { soundEffects } from '../utils/audio';
-import { BellRing } from 'lucide-react';
+import { BellRing, Smartphone, Bot } from 'lucide-react';
 
 interface NotificationCheckerProps {
   events: AgendaEvent[];
-  config: TelegramConfig;
+  config: NotificationConfig;
   onUpdateEvent: (event: AgendaEvent) => void;
 }
 
@@ -15,7 +15,7 @@ export const NotificationChecker: React.FC<NotificationCheckerProps> = ({
   config,
   onUpdateEvent,
 }) => {
-  const [lastAlert, setLastAlert] = useState<{ title: string; time: string } | null>(null);
+  const [lastAlert, setLastAlert] = useState<{ title: string; time: string; channel: string } | null>(null);
   const checkedEventsRef = useRef<Set<string>>(new Set());
 
   // Request browser notification permission once
@@ -67,19 +67,28 @@ export const NotificationChecker: React.FC<NotificationCheckerProps> = ({
             }
           }
 
-          // 3. Send Telegram Notification
-          if (config.autoSendEnabled && config.botToken && config.chatId) {
+          // 3. Send Notification via Evolution API (WhatsApp) and/or Telegram
+          const channel = config.channel || 'evolution';
+          if (config.autoSendEnabled) {
             try {
-              await sendTelegramNotification(event, config);
+              await sendNotification(event, config);
             } catch (err) {
-              console.error('Falha ao disparar alerta Telegram automático:', err);
+              console.error('Falha ao disparar alerta automático:', err);
             }
           }
 
           // 4. In-App Toast
+          const channelLabel =
+            channel === 'evolution'
+              ? 'WhatsApp (Evolution API)'
+              : channel === 'telegram'
+              ? 'Telegram'
+              : 'WhatsApp & Telegram';
+
           setLastAlert({
             title: event.title,
             time: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+            channel: channelLabel,
           });
           setTimeout(() => setLastAlert(null), 8000);
 
@@ -99,20 +108,29 @@ export const NotificationChecker: React.FC<NotificationCheckerProps> = ({
 
   if (!lastAlert) return null;
 
+  const isWhatsApp = config.channel === 'evolution' || config.channel === 'both';
+
   return (
     <div className="fixed bottom-6 right-6 z-50 animate-bounce">
-      <div className="bg-gradient-to-r from-sky-500 to-indigo-600 text-white p-4 rounded-2xl shadow-2xl border border-white/20 flex items-center gap-3 max-w-sm">
+      <div
+        className={`text-white p-4 rounded-2xl shadow-2xl border border-white/20 flex items-center gap-3 max-w-sm ${
+          isWhatsApp
+            ? 'bg-gradient-to-r from-emerald-600 to-teal-700'
+            : 'bg-gradient-to-r from-sky-500 to-indigo-600'
+        }`}
+      >
         <div className="p-2 bg-white/20 rounded-xl">
           <BellRing className="w-5 h-5 text-white animate-spin" style={{ animationDuration: '3s' }} />
         </div>
         <div className="text-xs">
-          <div className="font-bold uppercase tracking-wider text-sky-100 flex items-center gap-1">
-            <span>Alerta Telegram Disparado!</span>
+          <div className="font-bold uppercase tracking-wider text-emerald-100 flex items-center gap-1">
+            {isWhatsApp ? <Smartphone className="w-3.5 h-3.5" /> : <Bot className="w-3.5 h-3.5" />}
+            <span>Alerta Disparado!</span>
             <span>({lastAlert.time})</span>
           </div>
           <div className="font-semibold text-white truncate max-w-[200px]">{lastAlert.title}</div>
-          <div className="text-sky-100/90 text-[11px]">
-            Lembrete enviado para o Telegram de {config.wifeName || 'sua esposa'} 💕
+          <div className="text-white/80 text-[11px]">
+            Lembrete enviado via {lastAlert.channel} para {config.wifeName || 'sua esposa'} 💕
           </div>
         </div>
       </div>

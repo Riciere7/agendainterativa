@@ -1,22 +1,36 @@
-import { AgendaEvent, HabitTracker, LoveNote, StudyExam, ThemeId, TelegramConfig } from '../types';
+import { AgendaEvent, HabitTracker, LoveNote, StudyExam, ThemeId, NotificationConfig } from '../types';
 import { format } from 'date-fns';
 
 const EVENTS_KEY = 'agenda_events_v1';
-const CONFIG_KEY = 'agenda_telegram_config_v1';
+const NOTIFICATION_CONFIG_KEY = 'agenda_notification_config_v2';
+const LEGACY_TELEGRAM_KEY = 'agenda_telegram_config_v1';
+const LEGACY_WHATSAPP_KEY = 'agenda_whatsapp_config_v1';
 const THEME_KEY = 'agenda_theme_v1';
 const LOVE_NOTES_KEY = 'agenda_love_notes_v1';
 const HABITS_KEY = 'agenda_habits_v1';
 const EXAMS_KEY = 'agenda_exams_v1';
 
-export const DEFAULT_TELEGRAM_CONFIG: TelegramConfig = {
+export const DEFAULT_NOTIFICATION_CONFIG: NotificationConfig = {
+  channel: 'evolution',
   wifeName: 'Danielli',
   husbandName: 'Seu Amor',
+
+  // Evolution API (WhatsApp)
+  evolutionApiUrl: '',
+  evolutionApiKey: '',
+  evolutionInstanceName: 'agenda',
+  whatsappNumber: '',
+
+  // Telegram (Backup)
   botToken: '9176571908:AAENWsK1VEJ9k5K0wViwNU6zrP8mqk-Jp6k',
   chatId: '8378531554',
+
   autoSendEnabled: true,
   soundEnabled: true,
   sweetMessageSuffix: true,
 };
+
+export const DEFAULT_TELEGRAM_CONFIG = DEFAULT_NOTIFICATION_CONFIG;
 
 export const INITIAL_LOVE_NOTES: LoveNote[] = [
   {
@@ -102,14 +116,15 @@ export function getSampleEvents(): AgendaEvent[] {
     },
     {
       id: 'event-5',
-      title: 'Jantar Romântico & Cinema a Dois 🍕✨',
-      description: 'Nosso date especial da semana! Desconectar e aproveitar juntinhos.',
+      title: 'Jantar Especial do Casal 🍝🍷',
+      description: 'Nosso momento favorito juntos para conversar, rir e namorar.',
       category: 'amor',
       date: dayAfter,
       time: '20:00',
+      endTime: '22:30',
       locationOrLink: 'Restaurante Favorito',
       priority: 'alta',
-      reminderTiming: '1440',
+      reminderTiming: '60',
       completed: false,
       createdAt: Date.now() - 50000,
     },
@@ -118,15 +133,15 @@ export function getSampleEvents(): AgendaEvent[] {
 
 export function getSampleExams(): StudyExam[] {
   const futureDate1 = format(new Date(Date.now() + 86400000 * 5), 'yyyy-MM-dd');
-  const futureDate2 = format(new Date(Date.now() + 86400000 * 12), 'yyyy-MM-dd');
+  const futureDate2 = format(new Date(Date.now() + 86400000 * 14), 'yyyy-MM-dd');
 
   return [
     {
       id: 'exam-1',
-      subject: 'Legislação / Conteúdo Principal',
-      title: 'Avaliação Parcial - Módulo 2',
+      subject: 'Direito / Legislação Aplicada',
+      title: 'Simulado Geral & Questões Comentadas',
       date: futureDate1,
-      weightOrGrade: 'Peso 4.0',
+      weightOrGrade: 'Meta: 85%+',
       completed: false,
     },
     {
@@ -163,23 +178,69 @@ export function saveEvents(events: AgendaEvent[]): void {
   }
 }
 
-export function loadTelegramConfig(): TelegramConfig {
+export function loadNotificationConfig(): NotificationConfig {
   try {
-    const raw = localStorage.getItem(CONFIG_KEY);
-    if (!raw) return DEFAULT_TELEGRAM_CONFIG;
-    return { ...DEFAULT_TELEGRAM_CONFIG, ...JSON.parse(raw) };
+    // 1. Tenta carregar a versão v2 unificada
+    const rawV2 = localStorage.getItem(NOTIFICATION_CONFIG_KEY);
+    if (rawV2) {
+      return { ...DEFAULT_NOTIFICATION_CONFIG, ...JSON.parse(rawV2) };
+    }
+
+    // 2. Migração suave de versões anteriores (Telegram ou WhatsApp legado)
+    const rawLegacyTg = localStorage.getItem(LEGACY_TELEGRAM_KEY);
+    const rawLegacyWp = localStorage.getItem(LEGACY_WHATSAPP_KEY);
+
+    let parsedTg: Partial<NotificationConfig> = {};
+    let parsedWp: Partial<NotificationConfig> = {};
+
+    if (rawLegacyTg) {
+      try {
+        parsedTg = JSON.parse(rawLegacyTg);
+      } catch {
+        // ignore
+      }
+    }
+
+    if (rawLegacyWp) {
+      try {
+        const wp = JSON.parse(rawLegacyWp);
+        parsedWp = {
+          whatsappNumber: wp.wifePhone || '',
+          evolutionApiUrl: wp.evolutionApiUrl || '',
+          evolutionApiKey: wp.evolutionApiKey || '',
+          evolutionInstanceName: wp.evolutionInstanceName || 'agenda',
+        };
+      } catch {
+        // ignore
+      }
+    }
+
+    const merged: NotificationConfig = {
+      ...DEFAULT_NOTIFICATION_CONFIG,
+      ...parsedTg,
+      ...parsedWp,
+    };
+
+    saveNotificationConfig(merged);
+    return merged;
   } catch {
-    return DEFAULT_TELEGRAM_CONFIG;
+    return DEFAULT_NOTIFICATION_CONFIG;
   }
 }
 
-export function saveTelegramConfig(config: TelegramConfig): void {
+export function saveNotificationConfig(config: NotificationConfig): void {
   try {
-    localStorage.setItem(CONFIG_KEY, JSON.stringify(config));
+    localStorage.setItem(NOTIFICATION_CONFIG_KEY, JSON.stringify(config));
+    // Mantém espelho para componentes legados que leem a chave antiga
+    localStorage.setItem(LEGACY_TELEGRAM_KEY, JSON.stringify(config));
   } catch (err) {
-    console.error('Failed to save telegram config', err);
+    console.error('Failed to save notification config', err);
   }
 }
+
+// Aliases para retrocompatibilidade
+export const loadTelegramConfig = loadNotificationConfig;
+export const saveTelegramConfig = saveNotificationConfig;
 
 export function loadTheme(): ThemeId {
   try {
