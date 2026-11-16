@@ -31,6 +31,16 @@ function cleanUrl(url: string): string {
   return url.trim().replace(/\/+$/, '');
 }
 
+async function parseResponseJson(res: Response): Promise<{ ok: boolean; data: any; rawText: string }> {
+  const rawText = await res.text();
+  try {
+    const data = JSON.parse(rawText);
+    return { ok: true, data, rawText };
+  } catch {
+    return { ok: false, data: null, rawText };
+  }
+}
+
 export const onRequestPost = async (context: PagesFunctionContext<Env>): Promise<Response> => {
   const jsonHeaders = {
     'Content-Type': 'application/json',
@@ -64,6 +74,21 @@ export const onRequestPost = async (context: PagesFunctionContext<Env>): Promise
 
     const apiUrl = cleanUrl(rawApiUrl);
 
+    // Se for IP direto (ex: https://143.95.186.93), o Cloudflare Workers edge rejeita conexões de saída
+    // para endereços IP numéricos (Erro 1003 - Direct IP Access Not Allowed).
+    // O cliente deve efetuar a conexão diretamente pelo navegador, que já possui CORS autorizado.
+    const isDirectIp = /^https?:\/\/\d{1,3}(\.\d{1,3}){3}(:\d+)?/.test(apiUrl);
+    if (isDirectIp) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          isDirectIp: true,
+          error: 'A Cloudflare não permite requisições de backend para IP direto (Erro 1003). A aplicação deve conectar diretamente pelo navegador.',
+        }),
+        { status: 400, headers: jsonHeaders }
+      );
+    }
+
     // 1. Ação: Verificar Status de Conexão da Instância
     if (action === 'checkConnection') {
       const stateUrl = `${apiUrl}/instance/connectionState/${instanceName}`;
@@ -76,20 +101,14 @@ export const onRequestPost = async (context: PagesFunctionContext<Env>): Promise
           },
         });
 
-        const evoData = (await evoRes.json()) as {
-          instance?: { state?: string; instanceName?: string };
-          state?: string;
-          status?: number;
-          error?: string;
-          message?: string;
-        };
-
-        const state = evoData?.instance?.state || evoData?.state || 'unknown';
+        const parsed = await parseResponseJson(evoRes);
+        const evoData = parsed.data || {};
+        const state = evoData?.instance?.state || evoData?.state || (parsed.ok ? 'unknown' : 'error');
         const isOpen = state.toLowerCase() === 'open';
 
         return new Response(
           JSON.stringify({
-            success: evoRes.ok,
+            success: evoRes.ok && parsed.ok,
             state,
             isOpen,
             instanceName,
@@ -97,6 +116,7 @@ export const onRequestPost = async (context: PagesFunctionContext<Env>): Promise
               ? 'Instância conectada e pronta no WhatsApp! 🟢'
               : `Instância status: ${state}`,
             raw: evoData,
+            error: !parsed.ok ? parsed.rawText.slice(0, 150) : undefined,
           }),
           { headers: jsonHeaders }
         );
@@ -121,15 +141,8 @@ export const onRequestPost = async (context: PagesFunctionContext<Env>): Promise
           },
         });
 
-        const evoData = (await evoRes.json()) as {
-          base64?: string;
-          code?: string;
-          pairingCode?: string;
-          count?: number;
-          error?: string;
-          message?: string;
-        };
-
+        const parsed = await parseResponseJson(evoRes);
+        const evoData = parsed.data || {};
         const base64 = evoData?.base64 || '';
         const code = evoData?.code || '';
 
@@ -143,6 +156,7 @@ export const onRequestPost = async (context: PagesFunctionContext<Env>): Promise
               ? 'QR Code gerado com sucesso! Escaneie com o WhatsApp da sua esposa.'
               : 'QR Code indisponível ou instância já conectada.',
             raw: evoData,
+            error: !parsed.ok ? parsed.rawText.slice(0, 150) : undefined,
           }),
           { headers: jsonHeaders }
         );
@@ -167,12 +181,14 @@ export const onRequestPost = async (context: PagesFunctionContext<Env>): Promise
           },
         });
 
-        const evoData = (await evoRes.json()) as Record<string, any>;
+        const parsed = await parseResponseJson(evoRes);
+        const evoData = parsed.data || {};
         return new Response(
           JSON.stringify({
-            success: evoRes.ok,
-            message: 'Instância reiniciada com sucesso.',
+            success: evoRes.ok && parsed.ok,
+            message: evoRes.ok ? 'Instância reiniciada com sucesso.' : 'Falha ao reiniciar.',
             raw: evoData,
+            error: !parsed.ok ? parsed.rawText.slice(0, 150) : undefined,
           }),
           { headers: jsonHeaders }
         );
@@ -197,12 +213,14 @@ export const onRequestPost = async (context: PagesFunctionContext<Env>): Promise
           },
         });
 
-        const evoData = (await evoRes.json()) as Record<string, any>;
+        const parsed = await parseResponseJson(evoRes);
+        const evoData = parsed.data || {};
         return new Response(
           JSON.stringify({
-            success: evoRes.ok,
-            message: 'Instância desconectada com sucesso.',
+            success: evoRes.ok && parsed.ok,
+            message: evoRes.ok ? 'Instância desconectada com sucesso.' : 'Falha ao desconectar.',
             raw: evoData,
+            error: !parsed.ok ? parsed.rawText.slice(0, 150) : undefined,
           }),
           { headers: jsonHeaders }
         );
@@ -253,14 +271,15 @@ export const onRequestPost = async (context: PagesFunctionContext<Env>): Promise
       body: JSON.stringify(payload),
     });
 
-    const evoData = (await evoRes.json()) as Record<string, any>;
+    const parsed = await parseResponseJson(evoRes);
+    const evoData = parsed.data || {};
 
-    if (!evoRes.ok) {
+    if (!evoRes.ok || !parsed.ok) {
       const errorMsg =
         evoData?.response?.message ||
         evoData?.message ||
         evoData?.error ||
-        `Erro retornado pela Evolution API (HTTP ${evoRes.status})`;
+        (!parsed.ok ? parsed.rawText.slice(0, 150) : `Erro retornado pela Evolution API (HTTP ${evoRes.status})`);
 
       return new Response(
         JSON.stringify({

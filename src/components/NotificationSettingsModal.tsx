@@ -63,6 +63,7 @@ export const NotificationSettingsModal: React.FC<NotificationSettingsModalProps>
   const [isLoadingQr, setIsLoadingQr] = useState(false);
   const [qrCodeData, setQrCodeData] = useState<string | null>(null);
   const [connectionState, setConnectionState] = useState<'open' | 'close' | 'connecting' | 'unknown'>('unknown');
+  const [needsSslTrust, setNeedsSslTrust] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [isRestarting, setIsRestarting] = useState(false);
   const [showApiKey, setShowApiKey] = useState(false);
@@ -95,9 +96,11 @@ export const NotificationSettingsModal: React.FC<NotificationSettingsModalProps>
       const res = await checkEvolutionConnection(formData);
       const state = (res.state?.toLowerCase() || 'unknown') as 'open' | 'close' | 'connecting' | 'unknown';
       setConnectionState(state);
+      setNeedsSslTrust(Boolean(res.needsSslTrust));
 
       if (res.isOpen) {
         setQrCodeData(null);
+        setNeedsSslTrust(false);
         if (pollIntervalRef.current) {
           clearInterval(pollIntervalRef.current);
           pollIntervalRef.current = null;
@@ -106,6 +109,13 @@ export const NotificationSettingsModal: React.FC<NotificationSettingsModalProps>
           setTestStatus({
             type: 'success',
             message: 'Instância AGENDAINTERATIVA está conectada e pronta no WhatsApp! 🟢',
+          });
+        }
+      } else if (res.needsSslTrust) {
+        if (showFeedback) {
+          setTestStatus({
+            type: 'error',
+            message: res.message,
           });
         }
       } else if (showFeedback) {
@@ -169,6 +179,9 @@ export const NotificationSettingsModal: React.FC<NotificationSettingsModalProps>
           type: 'error',
           message: res.message || 'Não foi possível gerar o QR Code. Verifique se a instância já está conectada.',
         });
+        if (res.needsSslTrust) {
+          setNeedsSslTrust(true);
+        }
         handleCheckConnection(false);
       }
     } catch {
@@ -187,7 +200,8 @@ export const NotificationSettingsModal: React.FC<NotificationSettingsModalProps>
     }
     setIsLoggingOut(true);
     try {
-      await logoutEvolutionInstance(formData);
+      const res = await logoutEvolutionInstance(formData);
+      if (res.needsSslTrust) setNeedsSslTrust(true);
       setConnectionState('close');
       setQrCodeData(null);
       setTestStatus({
@@ -208,7 +222,8 @@ export const NotificationSettingsModal: React.FC<NotificationSettingsModalProps>
     setIsRestarting(true);
     setTestStatus(null);
     try {
-      await restartEvolutionInstance(formData);
+      const res = await restartEvolutionInstance(formData);
+      if (res.needsSslTrust) setNeedsSslTrust(true);
       setConnectionState('connecting');
       setTestStatus({
         type: 'info',
@@ -251,6 +266,9 @@ export const NotificationSettingsModal: React.FC<NotificationSettingsModalProps>
 
     try {
       const res = await sendEvolutionTextMessage(formData.whatsappNumber, testMessage, formData);
+      if (res.needsSslTrust) {
+        setNeedsSslTrust(true);
+      }
       if (res.success) {
         soundEffects.playSuccess();
         setTestStatus({
@@ -492,6 +510,17 @@ export const NotificationSettingsModal: React.FC<NotificationSettingsModalProps>
               </div>
 
               <div className="flex items-center gap-2">
+                <a
+                  href={formData.evolutionApiUrl || 'https://143.95.186.93'}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="p-2 rounded-xl bg-white border border-amber-300 hover:bg-amber-50 text-amber-900 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+                  title="Abrir o endereço do servidor no navegador para autorizar o certificado SSL"
+                >
+                  <Globe className="w-3.5 h-3.5 text-amber-600" />
+                  <span className="hidden sm:inline">Liberar HTTPS</span>
+                </a>
+
                 <button
                   type="button"
                   onClick={handleRestartInstance}
@@ -515,6 +544,33 @@ export const NotificationSettingsModal: React.FC<NotificationSettingsModalProps>
                 </button>
               </div>
             </div>
+
+            {/* Banner de Autorização de Certificado SSL */}
+            {needsSslTrust && (
+              <div className="p-4 rounded-2xl bg-amber-50 border-2 border-amber-300 text-amber-900 space-y-2.5 shadow-xs animate-fade-in">
+                <div className="flex items-center gap-2 font-bold text-xs text-amber-950">
+                  <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                  <span>Autorização do Certificado HTTPS Necessária (Apenas 1 Vez)</span>
+                </div>
+                <p className="text-xs text-amber-800 leading-relaxed">
+                  A sua Evolution API utiliza IP com certificado autoassinado (<code>{formData.evolutionApiUrl || 'https://143.95.186.93'}</code>). Para o navegador permitir o envio e a leitura de status:
+                </p>
+                <div className="flex flex-wrap items-center gap-2.5 pt-1">
+                  <a
+                    href={formData.evolutionApiUrl || 'https://143.95.186.93'}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold inline-flex items-center gap-2 shadow-sm transition-colors cursor-pointer"
+                  >
+                    <Globe className="w-3.5 h-3.5" />
+                    <span>1. Clique para Abrir o Servidor</span>
+                  </a>
+                  <span className="text-xs text-amber-900">
+                    ➔ Na nova aba, clique em <strong>"Avançado"</strong> e <strong>"Ir para 143.95.186.93 (não seguro)"</strong>. Depois volte aqui e clique em <strong>Verificar</strong>!
+                  </span>
+                </div>
+              </div>
+            )}
 
             {/* Connection Status Box */}
             {isConnected ? (

@@ -109,6 +109,7 @@ export interface EvolutionResult {
   message: string;
   state?: string;
   isOpen?: boolean;
+  needsSslTrust?: boolean;
 }
 
 export interface QrCodeResult {
@@ -117,6 +118,39 @@ export interface QrCodeResult {
   code?: string;
   pairingCode?: string;
   message: string;
+  needsSslTrust?: boolean;
+}
+
+/**
+ * Detecta se a URL aponta para um IP direto (ex: https://143.95.186.93)
+ */
+export function isDirectIpUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    return (
+      /^(\d{1,3}\.){3}\d{1,3}$/.test(parsed.hostname) ||
+      parsed.hostname === 'localhost' ||
+      parsed.hostname === '127.0.0.1'
+    );
+  } catch {
+    return /^https?:\/\/\d{1,3}(\.\d{1,3}){3}/.test(url);
+  }
+}
+
+/**
+ * Retorna true se estiver rodando no servidor de desenvolvimento Vite local (localhost)
+ */
+export function isLocalDev(): boolean {
+  if (typeof window === 'undefined') return false;
+  return window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+}
+
+function isNetworkOrCertError(err: unknown): boolean {
+  if (err instanceof TypeError) {
+    const msg = err.message.toLowerCase();
+    return msg.includes('fetch') || msg.includes('network') || msg.includes('failed');
+  }
+  return false;
 }
 
 /**
@@ -129,7 +163,37 @@ export async function checkEvolutionConnection(
   const instanceName = (config.evolutionInstanceName || 'AGENDAINTERATIVA').trim();
   const apiKey = (config.evolutionApiKey || '842CB014124C-4D07-8662-8D06B06659A0').trim();
 
-  // 1. Tentar via backend/proxy (/api/send-evolution)
+  // 1. Se for IP direto em produção (Pages), faz conexão DIRETA pelo navegador
+  // pois a Evolution API tem CORS liberado e a Cloudflare Workers proíbe conexões de backend para IP direto (Erro 1003).
+  if (isDirectIpUrl(apiUrl) && !isLocalDev()) {
+    return await checkConnectionDirect(apiUrl, instanceName, apiKey);
+  }
+
+  // 2. Se for local dev, tenta o proxy do Vite primeiro
+  if (isLocalDev()) {
+    try {
+      const proxyRes = await fetch(`/api/evolution-proxy/instance/connectionState/${instanceName}`, {
+        headers: { apikey: apiKey },
+      });
+      if (proxyRes.ok) {
+        const data = await proxyRes.json();
+        const state = data?.instance?.state || data?.state || 'desconhecido';
+        const isOpen = state.toLowerCase() === 'open';
+        return {
+          success: true,
+          state,
+          isOpen,
+          message: isOpen
+            ? 'Instância conectada e pronta no WhatsApp! 🟢'
+            : `Instância status: ${state} 🔴`,
+        };
+      }
+    } catch {
+      // continua
+    }
+  }
+
+  // 3. Tenta via backend (/api/send-evolution) para domínios com certificado normal
   try {
     const res = await fetch('/api/send-evolution', {
       method: 'POST',
@@ -142,8 +206,8 @@ export async function checkEvolutionConnection(
       }),
     });
 
-    if (res.ok) {
-      const data = await res.json();
+    const data = await res.json().catch(() => null);
+    if (res.ok && data?.success) {
       return {
         success: data.success,
         state: data.state,
@@ -153,33 +217,23 @@ export async function checkEvolutionConnection(
           : `Instância status: ${data.state || 'desconectada'} 🔴`,
       };
     }
-  } catch (err) {
-    console.warn('Endpoint /api/send-evolution inacessível, tentando proxy local /api/evolution-proxy...', err);
-  }
 
-  // 2. Fallback: Proxy local do Vite
-  try {
-    const proxyRes = await fetch(`/api/evolution-proxy/instance/connectionState/${instanceName}`, {
-      headers: { apikey: apiKey },
-    });
-    if (proxyRes.ok) {
-      const data = await proxyRes.json();
-      const state = data?.instance?.state || data?.state || 'desconhecido';
-      const isOpen = state.toLowerCase() === 'open';
-      return {
-        success: true,
-        state,
-        isOpen,
-        message: isOpen
-          ? 'Instância conectada e pronta no WhatsApp! 🟢'
-          : `Instância status: ${state} 🔴`,
-      };
+    if (data?.isDirectIp || data?.error?.includes('1003')) {
+      return await checkConnectionDirect(apiUrl, instanceName, apiKey);
     }
-  } catch {
-    // ignore
+  } catch (err) {
+    console.warn('Endpoint /api/send-evolution inacessível, tentando direto...', err);
   }
 
-  // 3. Fallback: Conexão direta com a Evolution API
+  // 4. Fallback final: Conexão direta pelo navegador
+  return await checkConnectionDirect(apiUrl, instanceName, apiKey);
+}
+
+async function checkConnectionDirect(
+  apiUrl: string,
+  instanceName: string,
+  apiKey: string
+): Promise<EvolutionResult> {
   try {
     const directUrl = `${apiUrl}/instance/connectionState/${instanceName}`;
     const directRes = await fetch(directUrl, {
@@ -209,6 +263,13 @@ export async function checkEvolutionConnection(
       message: `Erro na Evolution API: HTTP ${directRes.status}`,
     };
   } catch (err) {
+    if (isNetworkOrCertError(err)) {
+      return {
+        success: false,
+        needsSslTrust: true,
+        message: `⚠️ Certificado SSL pendente: Abra ${apiUrl} em uma nova aba e clique em 'Avançado > Continuar' para autorizar a Evolution API no navegador.`,
+      };
+    }
     const errorMsg = err instanceof Error ? err.message : 'Falha na conexão com a Evolution API';
     return {
       success: false,
@@ -227,7 +288,33 @@ export async function fetchEvolutionQrCode(
   const instanceName = (config.evolutionInstanceName || 'AGENDAINTERATIVA').trim();
   const apiKey = (config.evolutionApiKey || '842CB014124C-4D07-8662-8D06B06659A0').trim();
 
-  // 1. Tentar via backend/proxy (/api/send-evolution)
+  // 1. Se for IP direto em produção (Pages), faz conexão DIRETA pelo navegador
+  if (isDirectIpUrl(apiUrl) && !isLocalDev()) {
+    return await fetchQrCodeDirect(apiUrl, instanceName, apiKey);
+  }
+
+  // 2. Se for local dev, tenta o proxy do Vite
+  if (isLocalDev()) {
+    try {
+      const proxyRes = await fetch(`/api/evolution-proxy/instance/connect/${instanceName}`, {
+        headers: { apikey: apiKey },
+      });
+      if (proxyRes.ok) {
+        const data = await proxyRes.json();
+        return {
+          success: Boolean(data.base64 || data.code),
+          base64: data.base64,
+          code: data.code,
+          pairingCode: data.pairingCode,
+          message: 'QR Code obtido com sucesso!',
+        };
+      }
+    } catch {
+      // continua
+    }
+  }
+
+  // 3. Tenta via backend /api/send-evolution
   try {
     const res = await fetch('/api/send-evolution', {
       method: 'POST',
@@ -240,8 +327,8 @@ export async function fetchEvolutionQrCode(
       }),
     });
 
-    if (res.ok) {
-      const data = await res.json();
+    const data = await res.json().catch(() => null);
+    if (res.ok && data?.success) {
       return {
         success: data.success,
         base64: data.base64,
@@ -250,30 +337,23 @@ export async function fetchEvolutionQrCode(
         message: data.message || 'QR Code obtido com sucesso!',
       };
     }
+
+    if (data?.isDirectIp || data?.error?.includes('1003')) {
+      return await fetchQrCodeDirect(apiUrl, instanceName, apiKey);
+    }
   } catch (err) {
     console.warn('Falha via proxy /api/send-evolution ao obter QR code', err);
   }
 
-  // 2. Fallback: Proxy local do Vite
-  try {
-    const proxyRes = await fetch(`/api/evolution-proxy/instance/connect/${instanceName}`, {
-      headers: { apikey: apiKey },
-    });
-    if (proxyRes.ok) {
-      const data = await proxyRes.json();
-      return {
-        success: Boolean(data.base64 || data.code),
-        base64: data.base64,
-        code: data.code,
-        pairingCode: data.pairingCode,
-        message: 'QR Code obtido com sucesso!',
-      };
-    }
-  } catch {
-    // ignore
-  }
+  // 4. Fallback: Conexão direta
+  return await fetchQrCodeDirect(apiUrl, instanceName, apiKey);
+}
 
-  // 3. Fallback: Conexão direta
+async function fetchQrCodeDirect(
+  apiUrl: string,
+  instanceName: string,
+  apiKey: string
+): Promise<QrCodeResult> {
   try {
     const directUrl = `${apiUrl}/instance/connect/${instanceName}`;
     const directRes = await fetch(directUrl, {
@@ -294,14 +374,23 @@ export async function fetchEvolutionQrCode(
         message: 'QR Code obtido com sucesso!',
       };
     }
+    return {
+      success: false,
+      message: `Erro ao obter QR Code: HTTP ${directRes.status}`,
+    };
   } catch (err) {
-    console.error('Falha ao obter QR Code:', err);
+    if (isNetworkOrCertError(err)) {
+      return {
+        success: false,
+        needsSslTrust: true,
+        message: `⚠️ Certificado SSL pendente: Abra ${apiUrl} em uma nova aba e clique em 'Avançado > Continuar'.`,
+      };
+    }
+    return {
+      success: false,
+      message: `Falha ao obter QR Code: ${err instanceof Error ? err.message : 'Falha de rede'}`,
+    };
   }
-
-  return {
-    success: false,
-    message: 'Não foi possível gerar o QR Code. Verifique se a Evolution API está acessível.',
-  };
 }
 
 /**
@@ -309,11 +398,35 @@ export async function fetchEvolutionQrCode(
  */
 export async function restartEvolutionInstance(
   config: NotificationConfig
-): Promise<{ success: boolean; message: string }> {
+): Promise<{ success: boolean; message: string; needsSslTrust?: boolean }> {
   const apiUrl = cleanUrl(config.evolutionApiUrl || 'https://143.95.186.93');
   const instanceName = (config.evolutionInstanceName || 'AGENDAINTERATIVA').trim();
   const apiKey = (config.evolutionApiKey || '842CB014124C-4D07-8662-8D06B06659A0').trim();
 
+  // 1. Se for IP direto em produção (Pages), faz conexão DIRETA pelo navegador
+  if (isDirectIpUrl(apiUrl) && !isLocalDev()) {
+    return await restartInstanceDirect(apiUrl, instanceName, apiKey);
+  }
+
+  // 2. Se for local dev, tenta o proxy do Vite
+  if (isLocalDev()) {
+    try {
+      const proxyRes = await fetch(`/api/evolution-proxy/instance/restart/${instanceName}`, {
+        method: 'POST',
+        headers: { apikey: apiKey },
+      });
+      if (proxyRes.ok) {
+        return {
+          success: true,
+          message: 'Instância reiniciada com sucesso.',
+        };
+      }
+    } catch {
+      // continua
+    }
+  }
+
+  // 3. Tenta via backend /api/send-evolution
   try {
     const res = await fetch('/api/send-evolution', {
       method: 'POST',
@@ -326,21 +439,62 @@ export async function restartEvolutionInstance(
       }),
     });
 
-    if (res.ok) {
-      const data = await res.json();
+    const data = await res.json().catch(() => null);
+    if (res.ok && data?.success) {
       return {
         success: data.success,
         message: data.message || 'Instância reiniciada com sucesso.',
       };
     }
+
+    if (data?.isDirectIp || data?.error?.includes('1003')) {
+      return await restartInstanceDirect(apiUrl, instanceName, apiKey);
+    }
   } catch {
-    // ignore
+    // continua
   }
 
-  return {
-    success: false,
-    message: 'Falha ao reiniciar instância na Evolution API.',
-  };
+  return await restartInstanceDirect(apiUrl, instanceName, apiKey);
+}
+
+async function restartInstanceDirect(
+  apiUrl: string,
+  instanceName: string,
+  apiKey: string
+): Promise<{ success: boolean; message: string; needsSslTrust?: boolean }> {
+  try {
+    const directUrl = `${apiUrl}/instance/restart/${instanceName}`;
+    const directRes = await fetch(directUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        apikey: apiKey,
+      },
+    });
+
+    if (directRes.ok) {
+      return {
+        success: true,
+        message: 'Instância reiniciada com sucesso.',
+      };
+    }
+    return {
+      success: false,
+      message: `Erro ao reiniciar instância: HTTP ${directRes.status}`,
+    };
+  } catch (err) {
+    if (isNetworkOrCertError(err)) {
+      return {
+        success: false,
+        needsSslTrust: true,
+        message: `⚠️ Certificado SSL pendente: Abra ${apiUrl} em uma nova aba e clique em 'Avançado > Continuar'.`,
+      };
+    }
+    return {
+      success: false,
+      message: 'Falha ao reiniciar instância na Evolution API.',
+    };
+  }
 }
 
 /**
@@ -348,11 +502,35 @@ export async function restartEvolutionInstance(
  */
 export async function logoutEvolutionInstance(
   config: NotificationConfig
-): Promise<{ success: boolean; message: string }> {
+): Promise<{ success: boolean; message: string; needsSslTrust?: boolean }> {
   const apiUrl = cleanUrl(config.evolutionApiUrl || 'https://143.95.186.93');
   const instanceName = (config.evolutionInstanceName || 'AGENDAINTERATIVA').trim();
   const apiKey = (config.evolutionApiKey || '842CB014124C-4D07-8662-8D06B06659A0').trim();
 
+  // 1. Se for IP direto em produção (Pages), faz conexão DIRETA pelo navegador
+  if (isDirectIpUrl(apiUrl) && !isLocalDev()) {
+    return await logoutInstanceDirect(apiUrl, instanceName, apiKey);
+  }
+
+  // 2. Se for local dev, tenta o proxy do Vite
+  if (isLocalDev()) {
+    try {
+      const proxyRes = await fetch(`/api/evolution-proxy/instance/logout/${instanceName}`, {
+        method: 'DELETE',
+        headers: { apikey: apiKey },
+      });
+      if (proxyRes.ok) {
+        return {
+          success: true,
+          message: 'Desconectado com sucesso.',
+        };
+      }
+    } catch {
+      // continua
+    }
+  }
+
+  // 3. Tenta via backend /api/send-evolution
   try {
     const res = await fetch('/api/send-evolution', {
       method: 'POST',
@@ -365,21 +543,62 @@ export async function logoutEvolutionInstance(
       }),
     });
 
-    if (res.ok) {
-      const data = await res.json();
+    const data = await res.json().catch(() => null);
+    if (res.ok && data?.success) {
       return {
         success: data.success,
         message: data.message || 'Desconectado com sucesso.',
       };
     }
+
+    if (data?.isDirectIp || data?.error?.includes('1003')) {
+      return await logoutInstanceDirect(apiUrl, instanceName, apiKey);
+    }
   } catch {
-    // ignore
+    // continua
   }
 
-  return {
-    success: false,
-    message: 'Falha ao desconectar da Evolution API.',
-  };
+  return await logoutInstanceDirect(apiUrl, instanceName, apiKey);
+}
+
+async function logoutInstanceDirect(
+  apiUrl: string,
+  instanceName: string,
+  apiKey: string
+): Promise<{ success: boolean; message: string; needsSslTrust?: boolean }> {
+  try {
+    const directUrl = `${apiUrl}/instance/logout/${instanceName}`;
+    const directRes = await fetch(directUrl, {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+        apikey: apiKey,
+      },
+    });
+
+    if (directRes.ok) {
+      return {
+        success: true,
+        message: 'Desconectado com sucesso.',
+      };
+    }
+    return {
+      success: false,
+      message: `Erro ao desconectar: HTTP ${directRes.status}`,
+    };
+  } catch (err) {
+    if (isNetworkOrCertError(err)) {
+      return {
+        success: false,
+        needsSslTrust: true,
+        message: `⚠️ Certificado SSL pendente: Abra ${apiUrl} em uma nova aba e clique em 'Avançado > Continuar'.`,
+      };
+    }
+    return {
+      success: false,
+      message: 'Falha ao desconectar da Evolution API.',
+    };
+  }
 }
 
 /**
@@ -402,7 +621,43 @@ export async function sendEvolutionTextMessage(
     };
   }
 
-  // 1. Tenta envio através do backend/proxy (/api/send-evolution)
+  // 1. Se for IP direto em produção (Pages), faz envio DIRETO pelo navegador
+  // pois a Evolution API aceita CORS e a Cloudflare Workers rejeita IP direto (Erro 1003).
+  if (isDirectIpUrl(apiUrl) && !isLocalDev()) {
+    return await sendDirectBrowserMessage(apiUrl, instanceName, apiKey, cleanNum, text);
+  }
+
+  // 2. Se estiver em dev local, tenta proxy local do Vite
+  if (isLocalDev()) {
+    try {
+      const endpoint = `/api/evolution-proxy/message/sendText/${instanceName}`;
+      const proxyRes = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          apikey: apiKey,
+        },
+        body: JSON.stringify({
+          number: cleanNum,
+          text,
+          delay: 1200,
+          linkPreview: true,
+        }),
+      });
+
+      const proxyData = await proxyRes.json().catch(() => null);
+      if (proxyRes.ok) {
+        return {
+          success: true,
+          message: 'Lembrete enviado para o WhatsApp com sucesso!',
+        };
+      }
+    } catch {
+      // continua
+    }
+  }
+
+  // 3. Tenta envio através do backend/proxy (/api/send-evolution) para domínios normais
   try {
     const response = await fetch('/api/send-evolution', {
       method: 'POST',
@@ -417,64 +672,41 @@ export async function sendEvolutionTextMessage(
       }),
     });
 
-    const data = await response.json();
-    if (response.ok && data.success) {
+    const data = await response.json().catch(() => null);
+    if (response.ok && data?.success) {
       return {
         success: true,
         message: 'Lembrete enviado com sucesso para o WhatsApp!',
       };
-    } else if (data.error) {
+    }
+
+    if (data?.isDirectIp || data?.error?.includes('1003')) {
+      return await sendDirectBrowserMessage(apiUrl, instanceName, apiKey, cleanNum, text);
+    }
+
+    if (data?.error) {
       return {
         success: false,
         message: `Evolution API: ${data.error}`,
       };
     }
   } catch (err) {
-    console.warn('Backend /api/send-evolution inacessível, tentando proxy local...', err);
+    console.warn('Backend /api/send-evolution inacessível, tentando direto...', err);
   }
 
-  // 2. Fallback: Proxy local do Vite (/api/evolution-proxy)
+  // 4. Fallback final: Envio direto pelo navegador
+  return await sendDirectBrowserMessage(apiUrl, instanceName, apiKey, cleanNum, text);
+}
+
+async function sendDirectBrowserMessage(
+  apiUrl: string,
+  instanceName: string,
+  apiKey: string,
+  number: string,
+  text: string
+): Promise<EvolutionResult> {
+  const endpoint = `${apiUrl}/message/sendText/${instanceName}`;
   try {
-    const endpoint = `/api/evolution-proxy/message/sendText/${instanceName}`;
-    const proxyRes = await fetch(endpoint, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        apikey: apiKey,
-      },
-      body: JSON.stringify({
-        number: cleanNum,
-        text,
-        delay: 1200,
-        linkPreview: true,
-      }),
-    });
-
-    const proxyData = await proxyRes.json();
-    if (proxyRes.ok) {
-      return {
-        success: true,
-        message: 'Lembrete enviado para o WhatsApp com sucesso!',
-      };
-    }
-
-    const desc =
-      proxyData?.response?.message ||
-      proxyData?.message ||
-      proxyData?.error ||
-      `Erro HTTP ${proxyRes.status}`;
-
-    return {
-      success: false,
-      message: `Evolution API: ${desc}`,
-    };
-  } catch {
-    // ignore
-  }
-
-  // 3. Fallback: Envio direto
-  try {
-    const endpoint = `${apiUrl}/message/sendText/${instanceName}`;
     const directRes = await fetch(endpoint, {
       method: 'POST',
       headers: {
@@ -482,14 +714,15 @@ export async function sendEvolutionTextMessage(
         apikey: apiKey,
       },
       body: JSON.stringify({
-        number: cleanNum,
+        number,
         text,
         delay: 1200,
         linkPreview: true,
       }),
     });
 
-    const directData = await directRes.json();
+    const directData = await directRes.json().catch(() => null);
+
     if (directRes.ok) {
       return {
         success: true,
@@ -501,13 +734,20 @@ export async function sendEvolutionTextMessage(
       directData?.response?.message ||
       directData?.message ||
       directData?.error ||
-      `Erro HTTP ${directRes.status}`;
+      `Erro retornado pela Evolution API: HTTP ${directRes.status}`;
 
     return {
       success: false,
       message: `Evolution API: ${desc}`,
     };
   } catch (err) {
+    if (isNetworkOrCertError(err)) {
+      return {
+        success: false,
+        needsSslTrust: true,
+        message: `⚠️ Certificado SSL pendente: Abra ${apiUrl} em uma nova aba e clique em 'Avançado > Continuar' para autorizar a Evolution API no navegador.`,
+      };
+    }
     const errorMsg = err instanceof Error ? err.message : 'Falha na conexão com a Evolution API';
     return {
       success: false,
