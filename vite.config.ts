@@ -82,6 +82,23 @@ function evolutionApiDevPlugin(): Plugin {
                 return;
               }
 
+              if (action === 'restart') {
+                const evoRes = await fetch(`${apiUrl}/instance/restart/${instanceName}`, {
+                  method: 'POST',
+                  headers: { apikey: apiKey },
+                });
+                const evoData = await evoRes.json();
+                res.statusCode = evoRes.status;
+                res.end(
+                  JSON.stringify({
+                    success: evoRes.ok,
+                    message: 'Instância reiniciada com sucesso.',
+                    raw: evoData,
+                  })
+                );
+                return;
+              }
+
               if (action === 'logout') {
                 const evoRes = await fetch(`${apiUrl}/instance/logout/${instanceName}`, {
                   method: 'DELETE',

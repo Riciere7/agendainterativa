@@ -305,6 +305,45 @@ export async function fetchEvolutionQrCode(
 }
 
 /**
+ * Reinicia a instância do WhatsApp na Evolution API
+ */
+export async function restartEvolutionInstance(
+  config: NotificationConfig
+): Promise<{ success: boolean; message: string }> {
+  const apiUrl = cleanUrl(config.evolutionApiUrl || 'https://143.95.186.93');
+  const instanceName = (config.evolutionInstanceName || 'AGENDAINTERATIVA').trim();
+  const apiKey = (config.evolutionApiKey || '842CB014124C-4D07-8662-8D06B06659A0').trim();
+
+  try {
+    const res = await fetch('/api/send-evolution', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'restart',
+        apiUrl,
+        apiKey,
+        instanceName,
+      }),
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      return {
+        success: data.success,
+        message: data.message || 'Instância reiniciada com sucesso.',
+      };
+    }
+  } catch {
+    // ignore
+  }
+
+  return {
+    success: false,
+    message: 'Falha ao reiniciar instância na Evolution API.',
+  };
+}
+
+/**
  * Desconecta a instância do WhatsApp (Logout)
  */
 export async function logoutEvolutionInstance(

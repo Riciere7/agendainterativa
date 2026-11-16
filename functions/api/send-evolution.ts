@@ -155,7 +155,37 @@ export const onRequestPost = async (context: PagesFunctionContext<Env>): Promise
       }
     }
 
-    // 3. Ação: Desconectar Instância (Logout)
+    // 3. Ação: Reiniciar Instância
+    if (action === 'restart') {
+      const restartUrl = `${apiUrl}/instance/restart/${instanceName}`;
+      try {
+        const evoRes = await fetch(restartUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            apikey: apiKey,
+          },
+        });
+
+        const evoData = (await evoRes.json()) as Record<string, any>;
+        return new Response(
+          JSON.stringify({
+            success: evoRes.ok,
+            message: 'Instância reiniciada com sucesso.',
+            raw: evoData,
+          }),
+          { headers: jsonHeaders }
+        );
+      } catch (restartErr: unknown) {
+        const errorMsg = restartErr instanceof Error ? restartErr.message : 'Falha ao reiniciar Evolution API';
+        return new Response(
+          JSON.stringify({ success: false, error: errorMsg }),
+          { status: 500, headers: jsonHeaders }
+        );
+      }
+    }
+
+    // 4. Ação: Desconectar Instância (Logout)
     if (action === 'logout') {
       const logoutUrl = `${apiUrl}/instance/logout/${instanceName}`;
       try {

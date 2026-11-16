@@ -29,6 +29,7 @@ import {
   checkEvolutionConnection,
   fetchEvolutionQrCode,
   logoutEvolutionInstance,
+  restartEvolutionInstance,
   sendEvolutionTextMessage,
 } from '../utils/evolution';
 import { sendRawTelegramMessage } from '../utils/telegram';
@@ -63,6 +64,7 @@ export const NotificationSettingsModal: React.FC<NotificationSettingsModalProps>
   const [qrCodeData, setQrCodeData] = useState<string | null>(null);
   const [connectionState, setConnectionState] = useState<'open' | 'close' | 'connecting' | 'unknown'>('unknown');
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [isRestarting, setIsRestarting] = useState(false);
   const [showApiKey, setShowApiKey] = useState(false);
 
   const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -199,6 +201,27 @@ export const NotificationSettingsModal: React.FC<NotificationSettingsModalProps>
       });
     } finally {
       setIsLoggingOut(false);
+    }
+  };
+
+  const handleRestartInstance = async () => {
+    setIsRestarting(true);
+    setTestStatus(null);
+    try {
+      await restartEvolutionInstance(formData);
+      setConnectionState('connecting');
+      setTestStatus({
+        type: 'info',
+        message: 'Instância reiniciada! Gerando novo QR Code limpo...',
+      });
+      await handleFetchQrCode();
+    } catch {
+      setTestStatus({
+        type: 'error',
+        message: 'Falha ao reiniciar instância.',
+      });
+    } finally {
+      setIsRestarting(false);
     }
   };
 
@@ -469,6 +492,17 @@ export const NotificationSettingsModal: React.FC<NotificationSettingsModalProps>
               </div>
 
               <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleRestartInstance}
+                  disabled={isRestarting}
+                  className="p-2 rounded-xl bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
+                  title="Reiniciar a instância para limpar sessões e gerar QR Code novo"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${isRestarting ? 'animate-spin text-emerald-600' : ''}`} />
+                  <span className="hidden sm:inline">Reiniciar</span>
+                </button>
+
                 <button
                   type="button"
                   onClick={() => handleCheckConnection(true)}
